@@ -1,44 +1,84 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useAppStore } from '@/stores/useAppStore'
+import { useFirebaseAuthStore } from '@/stores/useFirebaseAuthStore'
+import { roommateService, messageService, knockService } from '@/services/firestore'
+import { geminiService } from '@/services/gemini'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 
-const AI_RESPONSES: Record<string, string[]> = {
-  greeting: ["Hey! How's it going?", "Hi there! Nice to meet you!", "Hello! Welcome to my room!"],
-  hobby: ["I love what I do! It's my passion.", "I spend most of my free time on this.", "Want to know more about it?"],
-  question: ["That's an interesting question!", "Hmm, let me think about that...", "I'm curious what you think?"],
-  default: ["That's cool!", "Tell me more!", "Interesting perspective!", "I see what you mean."],
-}
-
 export default function Home() {
   const store = useAppStore()
+  const authStore = useFirebaseAuthStore()
+  const [isAITyping, setIsAITyping] = useState(false)
 
-  // Auto-respond to user messages
+  // Initialize Firebase Auth
   useEffect(() => {
-    if (store.chatMessages.length > 0 && store.chatMessages[store.chatMessages.length - 1].sender === 'user') {
-      const timer = setTimeout(() => {
-        const lastMessage = store.chatMessages[store.chatMessages.length - 1].text.toLowerCase()
-        let responseCategory = 'default'
+    authStore.initialize()
+  }, [])
 
-        if (lastMessage.includes('hi') || lastMessage.includes('hello') || lastMessage.includes('hey')) {
-          responseCategory = 'greeting'
-        } else if (lastMessage.includes('do') || lastMessage.includes('hobby') || lastMessage.includes('like')) {
-          responseCategory = 'hobby'
-        } else if (lastMessage.includes('?')) {
-          responseCategory = 'question'
+  // Load user's knocks remaining on mount
+  useEffect(() => {
+    const loadKnocksRemaining = async () => {
+      if (authStore.userId && store.currentScreen === 'main') {
+        try {
+          const remaining = await knockService.getKnocksRemaining(authStore.userId)
+          // Update store with remaining knocks (we'll need to add this action)
+          console.log('Knocks remaining:', remaining)
+        } catch (error) {
+          console.error('Failed to load knocks:', error)
         }
-
-        const responses = AI_RESPONSES[responseCategory]
-        const randomResponse = responses[Math.floor(Math.random() * responses.length)]
-        store.receiveMessage(randomResponse)
-      }, 1000)
-
-      return () => clearTimeout(timer)
+      }
     }
-  }, [store.chatMessages, store])
+    loadKnocksRemaining()
+  }, [authStore.userId, store.currentScreen])
+
+  // AI chat with Gemini
+  useEffect(() => {
+    const handleAIResponse = async () => {
+      if (
+        store.chatMessages.length > 0 &&
+        store.chatMessages[store.chatMessages.length - 1].sender === 'user' &&
+        !isAITyping &&
+        store.selectedRoom?.roommate
+      ) {
+        setIsAITyping(true)
+
+        try {
+          // Convert chat messages to Gemini format
+          const geminiMessages = store.chatMessages.map(msg => ({
+            role: msg.sender === 'user' ? 'user' as const : 'model' as const,
+            content: msg.text,
+          }))
+
+          const roommatePersonality = store.selectedRoom.roommate.personality || 'a friendly roommate'
+          const response = await geminiService.chat(geminiMessages, roommatePersonality)
+
+          // Save message to Firestore if authenticated
+          if (authStore.userId && store.selectedRoom.roommate.id) {
+            await messageService.create({
+              userId: authStore.userId,
+              roommateId: store.selectedRoom.roommate.id.toString(),
+              sender: 'roommate',
+              content: response,
+            })
+          }
+
+          store.receiveMessage(response)
+        } catch (error) {
+          console.error('AI response failed:', error)
+          store.receiveMessage("Sorry, I'm having trouble responding right now.")
+        } finally {
+          setIsAITyping(false)
+        }
+      }
+    }
+
+    const timer = setTimeout(handleAIResponse, 1000)
+    return () => clearTimeout(timer)
+  }, [store.chatMessages, store.selectedRoom, authStore.userId, isAITyping, store])
 
   // Onboarding screens
   const renderOnboarding = () => {
@@ -128,8 +168,24 @@ export default function Home() {
           <p className="pixel-text text-sm mb-4">{store.rooms[2].roommate?.bio}</p>
           <p className="pixel-text text-xs text-gray-400">{store.rooms[2].roommate?.personality}</p>
         </div>
-        <Button onClick={() => store.completeOnboarding()} className="pixel-button mt-8">
-          Enter the Building
+        {authStore.error && (
+          <div className="bg-red-500 text-white pixel-text text-xs px-4 py-2 rounded">
+            {authStore.error}
+          </div>
+        )}
+        <Button
+          onClick={async () => {
+            try {
+              await authStore.registerUser(store.userName, parseInt(store.userAge))
+              store.completeOnboarding()
+            } catch (error) {
+              console.error('Registration failed:', error)
+            }
+          }}
+          className="pixel-button mt-8"
+          disabled={authStore.isLoading}
+        >
+          {authStore.isLoading ? 'Creating Account...' : 'Enter the Building'}
         </Button>
       </div>,
     ]
@@ -150,7 +206,7 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <div className="text-2xl">👤</div>
             <div>
-              <div className="pixel-text text-sm text-white">{store.userName || "Player"}</div>
+              <div className="pixel-text text-sm text-white">{authStore.userName || store.userName || "Player"}</div>
               <div className="pixel-text text-xs text-gray-400">Floor 1</div>
             </div>
           </div>
@@ -203,7 +259,50 @@ export default function Home() {
             {/* Knock Button - Bottom of Left Column */}
             <div className="flex justify-center py-6">
               <Button
-                onClick={() => store.knock()}
+                onClick={async () => {
+                  if (authStore.userId) {
+                    try {
+                      // Check knocks remaining
+                      const remaining = await knockService.getKnocksRemaining(authStore.userId)
+                      if (remaining <= 0) {
+                        alert('No knocks left today! Come back tomorrow.')
+                        return
+                      }
+
+                      // Perform knock
+                      store.knock()
+
+                      // Find the room number that was revealed
+                      const revealedRoom = store.rooms.find(r => !r.isBlackedOut)?.floor || 1
+
+                      // Save knock to Firestore
+                      await knockService.create({
+                        userId: authStore.userId,
+                        roomRevealed: revealedRoom,
+                      })
+
+                      // Create roommate in Firestore
+                      const roomWithRoommate = store.rooms.find(r => r.floor === revealedRoom)
+                      if (roomWithRoommate?.roommate) {
+                        await roommateService.create({
+                          name: roomWithRoommate.roommate.name,
+                          age: roomWithRoommate.roommate.age,
+                          bio: roomWithRoommate.roommate.bio || '',
+                          personality: roomWithRoommate.roommate.personality || '',
+                          avatar: roomWithRoommate.roommate.avatar || '👤',
+                          interests: [],
+                          userId: authStore.userId,
+                          isFirstMate: false,
+                        })
+                      }
+                    } catch (error) {
+                      console.error('Knock failed:', error)
+                      alert('Failed to knock. Please try again.')
+                    }
+                  } else {
+                    store.knock()
+                  }
+                }}
                 disabled={store.knocksRemaining <= 0}
                 className="pixel-button text-xl py-6 px-12"
                 size="lg"
@@ -266,17 +365,51 @@ export default function Home() {
                 <Input
                   value={store.chatInput}
                   onChange={(e) => store.setChatInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && store.sendMessage()}
+                  onKeyDown={async (e) => {
+                    if (e.key === 'Enter') {
+                      const message = store.chatInput
+                      store.sendMessage()
+                      // Save to Firestore
+                      if (authStore.userId && store.selectedRoom?.roommate?.id && message.trim()) {
+                        try {
+                          await messageService.create({
+                            userId: authStore.userId,
+                            roommateId: store.selectedRoom.roommate.id.toString(),
+                            sender: 'user',
+                            content: message,
+                          })
+                        } catch (error) {
+                          console.error('Failed to save message:', error)
+                        }
+                      }
+                    }
+                  }}
                   className="pixel-input flex-1 bg-white"
                   placeholder={store.selectedRoom ? "Type your message..." : "Select a room first..."}
-                  disabled={!store.selectedRoom}
+                  disabled={!store.selectedRoom || isAITyping}
                 />
                 <Button
-                  onClick={() => store.sendMessage()}
+                  onClick={async () => {
+                    const message = store.chatInput
+                    store.sendMessage()
+                    // Save to Firestore
+                    if (authStore.userId && store.selectedRoom?.roommate?.id && message.trim()) {
+                      try {
+                        await messageService.create({
+                          userId: authStore.userId,
+                          roommateId: store.selectedRoom.roommate.id.toString(),
+                          sender: 'user',
+                          content: message,
+                        })
+                      } catch (error) {
+                        console.error('Failed to save message:', error)
+                      }
+                    }
+                  }}
                   className="bg-cyan-400 hover:bg-cyan-500 border-4 border-black text-black pixel-text px-6"
-                  disabled={!store.selectedRoom}
+                  disabled={!store.selectedRoom || isAITyping}
                 >
-                  ▶
+                  {isAITyping ? '...' : '▶'}
                 </Button>
               </div>
             </div>
