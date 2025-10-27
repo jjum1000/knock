@@ -1,0 +1,149 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Press Start 2P', cursive;
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: grayscale;
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+}
+
+#root {
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.pixel-text {
+  font-family: 'Press Start 2P', cursive;
+  line-height: 1.6;
+  text-rendering: optimizeSpeed;
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.pixel-container {
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+}
+
+.pixel-button {
+  font-family: 'Press Start 2P', cursive;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 3px solid #000;
+  box-shadow: 4px 4px 0 #000;
+  background: linear-gradient(180deg, #4a90e2 0%, #357abd 100%);
+  color: white;
+  padding: 12px 24px;
+  transition: all 0.1s;
+  font-size: 12px;
+}
+
+.pixel-button:hover:not(:disabled) {
+  background: linear-gradient(180deg, #5aa4f2 0%, #4589cd 100%);
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 #000;
+}
+
+.pixel-button:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 #000;
+}
+
+.pixel-button:disabled {
+  background: linear-gradient(180deg, #666 0%, #444 100%);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.pixel-input {
+  font-family: 'Press Start 2P', cursive;
+  border: 3px solid #000;
+  box-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.3);
+  background: white;
+  padding: 12px;
+  font-size: 12px;
+}
+
+.pixel-input:focus {
+  outline: none;
+  border-color: #4a90e2;
+  box-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.3), 0 0 0 2px #4a90e2;
+}
+
+/* Animations */
+@keyframes knock-bounce {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+@keyframes room-reveal {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.knock-animation {
+  animation: knock-bounce 0.3s ease-in-out;
+}
+
+.room-reveal {
+  animation: room-reveal 0.5s ease-out;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1e293b;
+  border: 2px solid #000;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #475569;
+  border: 2px solid #000;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* Dialog overlay */
+[data-radix-dialog-overlay] {
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(4px);
+}
+
+/* Checkered pattern for blacked out rooms */
+.checkered-bg {
+  background-color: #2a2a2a;
+  background-image:
+    repeating-linear-gradient(
+      45deg,
+      #1a1a1a 0,
+      #1a1a1a 10px,
+      #2a2a2a 10px,
+      #2a2a2a 20px
+    );
+  background-size: 28px 28px;
+}

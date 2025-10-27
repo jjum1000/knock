@@ -1,0 +1,92 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+:root {
+  --background: #0f172a;
+  --foreground: #f8fafc;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: 'Press Start 2P', monospace;
+}
+
+/* Pixel Art Styles */
+.pixel-text {
+  font-family: 'Press Start 2P', monospace;
+  image-rendering: pixelated;
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.pixel-button {
+  font-family: 'Press Start 2P', monospace;
+  border: 4px solid #000;
+  background: #4ade80;
+  color: #000;
+  padding: 12px 24px;
+  cursor: pointer;
+  transition: all 0.1s;
+  image-rendering: pixelated;
+}
+
+.pixel-button:hover:not(:disabled) {
+  background: #22c55e;
+  transform: translate(-2px, -2px);
+  box-shadow: 4px 4px 0px #000;
+}
+
+.pixel-button:disabled {
+  background: #6b7280;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.pixel-container {
+  border: 4px solid #000;
+  background: rgba(15, 23, 42, 0.95);
+  padding: 32px;
+  image-rendering: pixelated;
+}
+
+.pixel-input {
+  font-family: 'Press Start 2P', monospace;
+  border: 4px solid #000;
+  background: #fff;
+  color: #000;
+  padding: 12px;
+  font-size: 12px;
+}
+
+.pixel-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 4px #4ade80;
+}
+
+/* Room Reveal Animation */
+@keyframes roomReveal {
+  0% {
+    filter: brightness(0.1);
+  }
+  100% {
+    filter: brightness(1);
+  }
+}
+
+.room-revealing {
+  animation: roomReveal 3s ease-out forwards;
+}
+
+/* Typing Animation */
+@keyframes typing {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+.typing-indicator {
+  animation: typing 1.5s infinite;
+}
