@@ -4,6 +4,9 @@
 .env.*.local
 backend/.env
 
+# Extension config (contains API keys)
+extension/firebase-config.js
+
 # Node modules
 node_modules/
 backend/node_modules/

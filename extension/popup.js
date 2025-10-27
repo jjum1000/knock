@@ -1,10 +1,30 @@
 console.log('KNOCK Popup loading...');
 
+// Initialize Firebase
+let db = null;
+let auth = null;
+let currentUser = null;
+
+try {
+  if (typeof firebase !== 'undefined' && window.FIREBASE_CONFIG) {
+    firebase.initializeApp(window.FIREBASE_CONFIG);
+    db = firebase.firestore();
+    auth = firebase.auth();
+    console.log('Firebase initialized successfully');
+  } else {
+    console.warn('Firebase not available, using mock data');
+  }
+} catch (error) {
+  console.error('Firebase initialization failed:', error);
+}
+
 // 현재 채팅 중인 룸메이트 정보
 let currentRoommate = null;
+let currentRoommateId = null;
 let currentMessages = [];
+let roommates = [];
 
-// 룸메이트별 대화 내역 (임시 데이터)
+// 룸메이트별 대화 내역 (임시 데이터 - Firebase 연결 실패 시 사용)
 const conversations = {
   'Alex': [
     { sender: 'roommate', text: '너 오늘 뭐해? 같이 게임할래?', time: '14:23' }
@@ -71,8 +91,66 @@ function renderMessages() {
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
+// OpenAI API 호출
+async function getAIResponse(userMessage, roommateName) {
+  if (!window.OPENAI_CONFIG) {
+    console.warn('OpenAI config not available, using mock response');
+    return getMockResponse();
+  }
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${window.OPENAI_CONFIG.apiKey}`
+      },
+      body: JSON.stringify({
+        model: window.OPENAI_CONFIG.model,
+        messages: [
+          {
+            role: 'system',
+            content: `너는 ${roommateName}라는 이름의 친근한 룸메이트야. 짧고 자연스러운 한국어로 대화해줘. 이모티콘이나 채팅 스타일로 편하게 얘기해. 한 문장에서 두 문장 정도로 짧게 답변해.`
+          },
+          {
+            role: 'user',
+            content: userMessage
+          }
+        ],
+        temperature: 0.8,
+        max_tokens: 150
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenAI API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.choices[0].message.content.trim();
+  } catch (error) {
+    console.error('OpenAI API call failed:', error);
+    return getMockResponse();
+  }
+}
+
+// Mock 응답 (API 실패 시 사용)
+function getMockResponse() {
+  const responses = [
+    '좋아! 그거 재밌겠다!',
+    '오 그래? 나도 그렇게 생각해!',
+    '헤헤 그치? 나 완전 신났어!',
+    '완전 대박이다! 너무 좋아!',
+    '진짜? 나도 궁금했어!',
+    '오케이~ 그럼 그렇게 하자!',
+    '와 진심 좋은데? 해보자!',
+    '나도 완전 찬성이야!'
+  ];
+  return responses[Math.floor(Math.random() * responses.length)];
+}
+
 // 메시지 전송
-function sendMessage() {
+async function sendMessage() {
   const input = document.getElementById('chat-input');
   const text = input.value.trim();
 
@@ -94,24 +172,13 @@ function sendMessage() {
   renderMessages();
   input.value = '';
 
-  // Mock AI 응답 (1-2초 후)
-  setTimeout(() => {
-    const responses = [
-      '좋아! 그거 재밌겠다!',
-      '오 그래? 나도 그렇게 생각해!',
-      '헤헤 그치? 나 완전 신났어!',
-      '완전 대박이다! 너무 좋아!',
-      '진짜? 나도 궁금했어!',
-      '오케이~ 그럼 그렇게 하자!',
-      '와 진심 좋은데? 해보자!',
-      '나도 완전 찬성이야!'
-    ];
-
-    const randomResponse = responses[Math.floor(Math.random() * responses.length)];
+  // AI 응답 받기
+  try {
+    const aiResponse = await getAIResponse(text, currentRoommate);
 
     currentMessages.push({
       sender: 'roommate',
-      text: randomResponse,
+      text: aiResponse,
       time: time
     });
 
@@ -119,7 +186,28 @@ function sendMessage() {
 
     // 대화 내역 저장
     conversations[currentRoommate] = currentMessages;
-  }, 1000 + Math.random() * 1000);
+
+    // Firebase에 저장 (가능한 경우)
+    if (db && currentUser && currentRoommateId) {
+      await db.collection('messages').add({
+        userId: currentUser.uid,
+        roommateId: currentRoommateId,
+        sender: 'user',
+        content: text,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      await db.collection('messages').add({
+        userId: currentUser.uid,
+        roommateId: currentRoommateId,
+        sender: 'roommate',
+        content: aiResponse,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+  } catch (error) {
+    console.error('Error sending message:', error);
+  }
 }
 
 document.addEventListener('DOMContentLoaded', function() {
