@@ -112,7 +112,7 @@ async function testFirebaseConnection() {
     try {
       const { GoogleGenerativeAI } = await import('@google/generative-ai')
       const genAI = new GoogleGenerativeAI(geminiApiKey)
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' })
+      const model = genAI.getGenerativeModel({ model: 'gemini-pro' })
 
       const result = await model.generateContent('Say hello in one word')
       const response = await result.response

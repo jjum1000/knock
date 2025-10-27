@@ -11,7 +11,7 @@ export interface ChatMessage {
 export const geminiService = {
   async chat(messages: ChatMessage[], roommatePersonality: string): Promise<string> {
     try {
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' })
+      const model = genAI.getGenerativeModel({ model: 'gemini-pro' })
 
       // Build conversation history
       const history = messages.slice(0, -1).map(msg => ({
