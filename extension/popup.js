@@ -1,28 +1,8 @@
 console.log('KNOCK Popup loading...');
 
-// Initialize Firebase
-let db = null;
-let auth = null;
-let currentUser = null;
-
-try {
-  if (typeof firebase !== 'undefined' && window.FIREBASE_CONFIG) {
-    firebase.initializeApp(window.FIREBASE_CONFIG);
-    db = firebase.firestore();
-    auth = firebase.auth();
-    console.log('Firebase initialized successfully');
-  } else {
-    console.warn('Firebase not available, using mock data');
-  }
-} catch (error) {
-  console.error('Firebase initialization failed:', error);
-}
-
 // 현재 채팅 중인 룸메이트 정보
 let currentRoommate = null;
-let currentRoommateId = null;
 let currentMessages = [];
-let roommates = [];
 
 // 룸메이트별 대화 내역 (임시 데이터 - Firebase 연결 실패 시 사용)
 const conversations = {
@@ -186,25 +166,6 @@ async function sendMessage() {
 
     // 대화 내역 저장
     conversations[currentRoommate] = currentMessages;
-
-    // Firebase에 저장 (가능한 경우)
-    if (db && currentUser && currentRoommateId) {
-      await db.collection('messages').add({
-        userId: currentUser.uid,
-        roommateId: currentRoommateId,
-        sender: 'user',
-        content: text,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-
-      await db.collection('messages').add({
-        userId: currentUser.uid,
-        roommateId: currentRoommateId,
-        sender: 'roommate',
-        content: aiResponse,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-    }
   } catch (error) {
     console.error('Error sending message:', error);
   }
