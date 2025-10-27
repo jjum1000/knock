@@ -32,7 +32,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'SHOW_NOTIFICATION':
       chrome.notifications.create({
         type: 'basic',
-        iconUrl: 'icons/icon-128.png',
         title: message.title || 'KNOCK',
         message: message.message || '',
       })
