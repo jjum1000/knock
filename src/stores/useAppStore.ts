@@ -53,8 +53,10 @@ interface AppState {
   setUserAge: (age: string) => void
   completeOnboarding: () => void
   knock: () => void
+  setKnocksRemaining: (knocks: number) => void
   selectRoom: (room: Room | null) => void
   setChatInput: (input: string) => void
+  setChatMessages: (messages: Message[]) => void
   sendMessage: () => void
   receiveMessage: (text: string) => void
   resetApp: () => void
@@ -104,9 +106,13 @@ export const useAppStore = create<AppState>()(
           set({ rooms: updatedRooms, knocksRemaining: knocksRemaining - 1 })
         },
 
+        setKnocksRemaining: (knocks) => set({ knocksRemaining: knocks }),
+
         selectRoom: (room) => set({ selectedRoom: room, chatMessages: [] }),
 
         setChatInput: (input) => set({ chatInput: input }),
+
+        setChatMessages: (messages) => set({ chatMessages: messages }),
 
         sendMessage: () => {
           const { chatInput, chatMessages } = get()

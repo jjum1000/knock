@@ -19,13 +19,55 @@ export default function Home() {
     authStore.initialize()
   }, [])
 
+  // Real-time message listener for selected room
+  useEffect(() => {
+    if (!authStore.userId || !store.selectedRoom?.roommate?.id) {
+      return
+    }
+
+    const unsubscribe = messageService.onConversationChange(
+      authStore.userId,
+      store.selectedRoom.roommate.id.toString(),
+      (messages) => {
+        // Sync Firestore messages to local store
+        store.setChatMessages(messages.map(msg => ({
+          id: msg.id,
+          text: msg.content,
+          sender: msg.sender === 'user' ? 'user' : 'roommate',
+          timestamp: msg.createdAt,
+        })))
+      }
+    )
+
+    return () => unsubscribe()
+  }, [authStore.userId, store.selectedRoom?.roommate?.id])
+
+  // Load user's roommates from Firestore
+  useEffect(() => {
+    if (!authStore.userId || store.currentScreen !== 'main') {
+      return
+    }
+
+    const loadRoommates = async () => {
+      try {
+        const roommates = await roommateService.getByUserId(authStore.userId!)
+        console.log('Loaded roommates from Firestore:', roommates)
+        // TODO: Sync roommates with local store rooms
+      } catch (error) {
+        console.error('Failed to load roommates:', error)
+      }
+    }
+
+    loadRoommates()
+  }, [authStore.userId, store.currentScreen])
+
   // Load user's knocks remaining on mount
   useEffect(() => {
     const loadKnocksRemaining = async () => {
       if (authStore.userId && store.currentScreen === 'main') {
         try {
           const remaining = await knockService.getKnocksRemaining(authStore.userId)
-          // Update store with remaining knocks (we'll need to add this action)
+          store.setKnocksRemaining(remaining)
           console.log('Knocks remaining:', remaining)
         } catch (error) {
           console.error('Failed to load knocks:', error)
