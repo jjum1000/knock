@@ -11,7 +11,9 @@ import {
   orderBy,
   limit,
   Timestamp,
-  serverTimestamp
+  serverTimestamp,
+  onSnapshot,
+  Unsubscribe
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 
@@ -109,6 +111,20 @@ export const roommateService = {
     }
     return null
   },
+
+  // Real-time listener for user's roommates
+  onRoommatesChange(userId: string, callback: (roommates: Roommate[]) => void): Unsubscribe {
+    const q = query(collection(db, 'roommates'), where('userId', '==', userId))
+
+    return onSnapshot(q, (snapshot) => {
+      const roommates = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate() || new Date(),
+      })) as Roommate[]
+      callback(roommates)
+    })
+  },
 }
 
 // Message Service
@@ -133,6 +149,29 @@ export const messageService = {
       id: doc.id,
       ...doc.data(),
     })) as Message[]
+  },
+
+  // Real-time listener for conversation
+  onConversationChange(
+    userId: string,
+    roommateId: string,
+    callback: (messages: Message[]) => void
+  ): Unsubscribe {
+    const q = query(
+      collection(db, 'messages'),
+      where('userId', '==', userId),
+      where('roommateId', '==', roommateId),
+      orderBy('createdAt', 'asc')
+    )
+
+    return onSnapshot(q, (snapshot) => {
+      const messages = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate() || new Date(),
+      })) as Message[]
+      callback(messages)
+    })
   },
 }
 
