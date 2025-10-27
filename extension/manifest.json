@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Chat with AI roommates while browsing. Never feel alone again.",
   "action": {
-    "default_popup": "popup-test.html"
+    "default_popup": "popup-interactive.html"
   },
   "background": {
     "service_worker": "background.js",

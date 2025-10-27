@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KNOCK Popup</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 360px;
+      height: 600px;
+      font-family: 'Press Start 2P', cursive;
+      background: linear-gradient(to bottom right, #0f172a, #581c87, #0f172a);
+      color: white;
+      overflow: hidden;
+    }
+
+    .screen {
+      display: none;
+      width: 100%;
+      height: 100%;
+      flex-direction: column;
+    }
+
+    .screen.active {
+      display: flex;
+    }
+
+    .header {
+      background: #1e293b;
+      border-bottom: 4px solid black;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .title {
+      font-size: 12px;
+    }
+
+    .back-btn {
+      background: none;
+      border: none;
+      color: white;
+      font-size: 18px;
+      cursor: pointer;
+      padding: 0;
+      font-family: 'Press Start 2P', cursive;
+    }
+
+    .back-btn:hover {
+      color: #22d3ee;
+    }
+
+    .content {
+      padding: 16px;
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .content h2 {
+      font-size: 10px;
+      margin-bottom: 12px;
+    }
+
+    .roommate-card {
+      background: #1e293b;
+      border: 4px solid black;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 12px;
+      cursor: pointer;
+      transition: all 0.1s;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .roommate-card:hover {
+      background: #334155;
+      transform: translate(-2px, -2px);
+      box-shadow: 4px 4px 0 black;
+    }
+
+    .emoji {
+      font-size: 32px;
+    }
+
+    .info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .name {
+      font-size: 10px;
+      margin-bottom: 4px;
+    }
+
+    .message {
+      font-size: 8px;
+      color: #9ca3af;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .badge {
+      background: #ef4444;
+      color: white;
+      font-size: 8px;
+      border: 2px solid black;
+      border-radius: 999px;
+      padding: 4px 8px;
+      flex-shrink: 0;
+    }
+
+    .buttons {
+      position: absolute;
+      bottom: 16px;
+      left: 16px;
+      right: 16px;
+      display: flex;
+      gap: 8px;
+    }
+
+    button {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 10px;
+      padding: 12px;
+      border: 4px solid black;
+      cursor: pointer;
+      transition: all 0.1s;
+    }
+
+    button:hover {
+      transform: translate(-2px, -2px);
+      box-shadow: 4px 4px 0 black;
+    }
+
+    button:active {
+      transform: translate(0, 0);
+      box-shadow: 2px 2px 0 black;
+    }
+
+    .btn-primary {
+      flex: 1;
+      background: #9333ea;
+      color: white;
+    }
+
+    .btn-secondary {
+      flex: 1;
+      background: #22d3ee;
+      color: black;
+    }
+
+    /* Chat Screen */
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .msg {
+      display: flex;
+    }
+
+    .msg.user {
+      justify-content: flex-end;
+    }
+
+    .msg-bubble {
+      max-width: 80%;
+      padding: 8px 12px;
+      border: 4px solid black;
+      border-radius: 4px;
+      box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.3);
+    }
+
+    .msg.user .msg-bubble {
+      background: #22d3ee;
+      color: black;
+    }
+
+    .msg.roommate .msg-bubble {
+      background: white;
+      color: black;
+    }
+
+    .msg-text {
+      font-size: 8px;
+      line-height: 1.4;
+      margin-bottom: 4px;
+    }
+
+    .msg-time {
+      font-size: 6px;
+      color: #6b7280;
+      text-align: right;
+    }
+
+    .chat-input-container {
+      padding: 12px;
+      background: #1e293b;
+      border-top: 4px solid black;
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .chat-input {
+      flex: 1;
+      font-family: 'Press Start 2P', cursive;
+      font-size: 10px;
+      padding: 8px;
+      border: 4px solid black;
+      background: white;
+      color: black;
+    }
+
+    .send-btn {
+      background: #22d3ee;
+      color: black;
+      padding: 8px 16px;
+      border: 4px solid black;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: #1e293b;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border: 2px solid black;
+    }
+
+    .typing {
+      font-size: 8px;
+      color: #9ca3af;
+      padding: 8px;
+    }
+  </style>
+</head>
+<body>
+  <!-- List Screen -->
+  <div id="listScreen" class="screen active">
+    <div class="header">
+      <div class="logo">
+        <span style="font-size: 24px;">🏠</span>
+        <span class="title">KNOCK</span>
+      </div>
+      <span style="font-size: 18px; cursor: pointer;" onclick="alert('설정 기능 준비 중!')">⚙️</span>
+    </div>
+
+    <div class="content">
+      <h2>내 룸메이트들</h2>
+
+      <div class="roommate-card" onclick="openChat('Alex', '🎮')">
+        <span class="emoji">🎮</span>
+        <div class="info">
+          <div class="name">Alex</div>
+          <div class="message">너 뭐해? 같이 게임할래?</div>
+        </div>
+        <span class="badge">1</span>
+      </div>
+
+      <div class="roommate-card" onclick="openChat('Emma', '📚')">
+        <span class="emoji">📚</span>
+        <div class="info">
+          <div class="name">Emma</div>
+          <div class="message">안녕!</div>
+        </div>
+      </div>
+
+      <div class="roommate-card" onclick="openChat('James', '☕')">
+        <span class="emoji">☕</span>
+        <div class="info">
+          <div class="name">James</div>
+          <div class="message">좋은 아침!</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="buttons">
+      <button class="btn-primary" onclick="openWebApp()">🏠 건물 보기</button>
+      <button class="btn-secondary" onclick="alert('노크 기능 준비 중! Firebase 연결 후 사용 가능합니다.')">🚪 노크하기</button>
+    </div>
+  </div>
+
+  <!-- Chat Screen -->
+  <div id="chatScreen" class="screen">
+    <div class="header">
+      <button class="back-btn" onclick="backToList()">←</button>
+      <div class="logo">
+        <span id="chatEmoji" class="emoji" style="font-size: 24px;">🎮</span>
+        <div>
+          <div id="chatName" class="title" style="font-size: 10px;">Alex</div>
+          <div style="font-size: 8px; color: #9ca3af;">online</div>
+        </div>
+      </div>
+      <span style="font-size: 18px; opacity: 0;">⚙️</span>
+    </div>
+
+    <div class="messages" id="messages">
+      <!-- Messages will be added here -->
+    </div>
+
+    <div class="chat-input-container">
+      <input
+        type="text"
+        id="chatInput"
+        class="chat-input"
+        placeholder="메시지 입력..."
+        onkeypress="if(event.key==='Enter') sendMessage()"
+      >
+      <button class="send-btn" onclick="sendMessage()">▶</button>
+    </div>
+  </div>
+
+  <script>
+    // Sample messages for each roommate
+    const conversations = {
+      'Alex': [
+        { sender: 'roommate', text: '너 오늘 뭐해? 같이 게임할래?', time: '14:23' },
+      ],
+      'Emma': [
+        { sender: 'roommate', text: '안녕! 오늘 날씨 좋다~', time: '어제' },
+      ],
+      'James': [
+        { sender: 'roommate', text: '좋은 아침! 커피 한 잔 어때?', time: '3일전' },
+      ]
+    };
+
+    let currentRoommate = null;
+    let currentMessages = [];
+
+    function openChat(name, emoji) {
+      currentRoommate = name;
+      document.getElementById('chatName').textContent = name;
+      document.getElementById('chatEmoji').textContent = emoji;
+
+      // Load conversation history
+      currentMessages = conversations[name] || [];
+      renderMessages();
+
+      // Switch screens
+      document.getElementById('listScreen').classList.remove('active');
+      document.getElementById('chatScreen').classList.add('active');
+
+      // Focus input
+      document.getElementById('chatInput').focus();
+    }
+
+    function backToList() {
+      document.getElementById('chatScreen').classList.remove('active');
+      document.getElementById('listScreen').classList.add('active');
+    }
+
+    function renderMessages() {
+      const messagesDiv = document.getElementById('messages');
+      messagesDiv.innerHTML = '';
+
+      currentMessages.forEach(msg => {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `msg ${msg.sender}`;
+
+        msgDiv.innerHTML = `
+          <div class="msg-bubble">
+            <div class="msg-text">
+              <strong>${msg.sender === 'user' ? 'You' : currentRoommate}:</strong><br>
+              ${msg.text}
+            </div>
+            <div class="msg-time">${msg.time}</div>
+          </div>
+        `;
+
+        messagesDiv.appendChild(msgDiv);
+      });
+
+      // Scroll to bottom
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    function sendMessage() {
+      const input = document.getElementById('chatInput');
+      const text = input.value.trim();
+
+      if (!text) return;
+
+      // Add user message
+      const now = new Date();
+      const time = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+      currentMessages.push({
+        sender: 'user',
+        text: text,
+        time: time
+      });
+
+      renderMessages();
+      input.value = '';
+
+      // Show typing indicator
+      const messagesDiv = document.getElementById('messages');
+      const typingDiv = document.createElement('div');
+      typingDiv.className = 'typing';
+      typingDiv.innerHTML = '💭 typing...';
+      messagesDiv.appendChild(typingDiv);
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+      // Simulate AI response (will be replaced with real OpenAI call)
+      setTimeout(() => {
+        messagesDiv.removeChild(typingDiv);
+
+        const responses = [
+          '좋아! 그거 재밌겠다!',
+          '오 그래? 나도 그렇게 생각해!',
+          '흠... 한번 생각해볼게!',
+          '완전 동의! 😊',
+          '그건 좋은 아이디어네!'
+        ];
+
+        const response = responses[Math.floor(Math.random() * responses.length)];
+
+        currentMessages.push({
+          sender: 'roommate',
+          text: response,
+          time: time
+        });
+
+        renderMessages();
+      }, 1000 + Math.random() * 1000);
+    }
+
+    function openWebApp() {
+      // Open web app in new tab
+      chrome.tabs.create({ url: 'http://localhost:3002' });
+    }
+
+    console.log('KNOCK Popup loaded with interactive features!');
+  </script>
+</body>
+</html>
