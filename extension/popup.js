@@ -73,12 +73,19 @@ function renderMessages() {
 
 // OpenAI API 호출
 async function getAIResponse(userMessage, roommateName) {
+  console.log('[AI] Requesting response for:', userMessage);
+
   if (!window.OPENAI_CONFIG) {
-    console.warn('OpenAI config not available, using mock response');
+    console.error('[AI] OpenAI config not available!');
     return getMockResponse();
   }
 
+  console.log('[AI] API Key exists:', !!window.OPENAI_CONFIG.apiKey);
+  console.log('[AI] Model:', window.OPENAI_CONFIG.model);
+
   try {
+    console.log('[AI] Calling OpenAI API...');
+
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -102,14 +109,20 @@ async function getAIResponse(userMessage, roommateName) {
       })
     });
 
+    console.log('[AI] Response status:', response.status);
+
     if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status}`);
+      const errorData = await response.json();
+      console.error('[AI] API Error:', errorData);
+      throw new Error(`OpenAI API error: ${response.status} - ${JSON.stringify(errorData)}`);
     }
 
     const data = await response.json();
+    console.log('[AI] Success! Response:', data.choices[0].message.content);
     return data.choices[0].message.content.trim();
   } catch (error) {
-    console.error('OpenAI API call failed:', error);
+    console.error('[AI] API call failed:', error);
+    console.log('[AI] Using mock response as fallback');
     return getMockResponse();
   }
 }
