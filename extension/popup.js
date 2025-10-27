@@ -1,5 +1,12 @@
 console.log('KNOCK Popup loading...');
 
+// Save OpenAI config to Chrome storage for background script
+if (window.OPENAI_CONFIG) {
+  chrome.storage.local.set({ openai_config: window.OPENAI_CONFIG }, () => {
+    console.log('[Popup] OpenAI config saved to storage');
+  });
+}
+
 // 현재 채팅 중인 룸메이트 정보
 let currentRoommate = null;
 let currentMessages = [];
