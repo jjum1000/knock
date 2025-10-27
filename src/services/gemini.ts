@@ -1,13 +1,35 @@
+/**
+ * Gemini 이미지 생성 서비스
+ *
+ * 이 서비스는 Google Gemini API를 사용하여 이미지를 생성합니다.
+ * 대화 생성은 OpenAI GPT를 사용합니다 (src/services/chat.ts 참조)
+ */
+
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY || '')
 
+export interface ImageGenerationPrompt {
+  prompt: string
+  style?: string
+}
+
+export const geminiImageService = {
+  // TODO: 이미지 생성 기능 구현
+  async generateImage(prompt: ImageGenerationPrompt): Promise<string> {
+    // 추후 Gemini Imagen API 또는 다른 이미지 생성 API 연동
+    throw new Error('Not implemented yet')
+  },
+}
+
+// 레거시: 대화 생성 (사용하지 않음 - OpenAI GPT 사용)
 export interface ChatMessage {
   role: 'user' | 'model'
   content: string
 }
 
+/** @deprecated Use chatService from '@/services/chat' instead */
 export const geminiService = {
   async chat(messages: ChatMessage[], roommatePersonality: string): Promise<string> {
     try {

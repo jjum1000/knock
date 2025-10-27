@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useAppStore } from '@/stores/useAppStore'
 import { useFirebaseAuthStore } from '@/stores/useFirebaseAuthStore'
 import { roommateService, messageService, knockService } from '@/services/firestore'
-import { geminiService } from '@/services/gemini'
+import { chatService } from '@/services/chat'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -35,7 +35,7 @@ export default function Home() {
     loadKnocksRemaining()
   }, [authStore.userId, store.currentScreen])
 
-  // AI chat with Gemini
+  // AI chat with OpenAI GPT
   useEffect(() => {
     const handleAIResponse = async () => {
       if (
@@ -47,14 +47,14 @@ export default function Home() {
         setIsAITyping(true)
 
         try {
-          // Convert chat messages to Gemini format
-          const geminiMessages = store.chatMessages.map(msg => ({
-            role: msg.sender === 'user' ? 'user' as const : 'model' as const,
+          // Convert chat messages to OpenAI format
+          const chatMessages = store.chatMessages.map(msg => ({
+            role: msg.sender === 'user' ? 'user' as const : 'assistant' as const,
             content: msg.text,
           }))
 
           const roommatePersonality = store.selectedRoom.roommate.personality || 'a friendly roommate'
-          const response = await geminiService.chat(geminiMessages, roommatePersonality)
+          const response = await chatService.chat(chatMessages, roommatePersonality)
 
           // Save message to Firestore if authenticated
           if (authStore.userId && store.selectedRoom.roommate.id) {
