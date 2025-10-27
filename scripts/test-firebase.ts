@@ -2,12 +2,17 @@
  * Firebase 연결 테스트 스크립트
  *
  * 실행 방법:
- * npx ts-node scripts/test-firebase.ts
+ * npm run test:firebase
  */
 
+import { config } from 'dotenv'
+import { resolve } from 'path'
 import { initializeApp, getApps } from 'firebase/app'
 import { getAuth, signInAnonymously } from 'firebase/auth'
 import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc } from 'firebase/firestore'
+
+// .env.local 파일 로드
+config({ path: resolve(process.cwd(), '.env.local') })
 
 // 환경 변수 로드
 const firebaseConfig = {
