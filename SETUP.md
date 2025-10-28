@@ -1,10 +1,45 @@
-# Firebase 및 Gemini API 설정 가이드
+# Knock - 설정 가이드
 
-이 가이드를 따라 Firebase와 Gemini API를 설정하세요.
+프로젝트를 시작하는 데 필요한 Firebase와 Gemini API 설정을 안내합니다.
 
 ---
 
-## 📋 준비물
+## 🚀 빠른 시작 (2분)
+
+이미 Firebase 프로젝트가 있고 빠르게 시작하고 싶다면:
+
+### Step 1: Authentication 활성화 (30초)
+
+[Firebase Console - Authentication](https://console.firebase.google.com/project/knock-33238/authentication/providers)
+
+1. **"Anonymous"** 찾기
+2. 클릭 후 토글 스위치 **켜기**
+3. **"저장"** 클릭
+
+### Step 2: Firestore Database 생성 (30초)
+
+[Firebase Console - Firestore](https://console.firebase.google.com/project/knock-33238/firestore)
+
+1. **"데이터베이스 만들기"** 클릭
+2. **"테스트 모드에서 시작"** 선택
+3. 위치: **"asia-northeast3 (Seoul)"** 선택
+4. **"사용 설정"** 클릭
+
+### Step 3: 테스트 실행
+
+```bash
+npm run test:firebase
+```
+
+모든 테스트가 통과하면 설정 완료! 🎉
+
+---
+
+## 📋 상세 설정 가이드
+
+처음 Firebase를 설정하거나 단계별 안내가 필요한 경우:
+
+### 준비물
 
 - Google 계정
 - 인터넷 연결
@@ -15,10 +50,12 @@
 ## 🔥 Step 1: Firebase 프로젝트 생성
 
 ### 1.1 Firebase Console 접속
-1. 브라우저에서 https://console.firebase.google.com/ 접속
+
+1. https://console.firebase.google.com/ 접속
 2. Google 계정으로 로그인
 
 ### 1.2 새 프로젝트 생성
+
 1. "프로젝트 추가" 또는 "Add project" 클릭
 2. 프로젝트 이름 입력: `knock` (또는 원하는 이름)
 3. "계속" 클릭
@@ -32,37 +69,43 @@
 ## 🔐 Step 2: Authentication 설정
 
 ### 2.1 Authentication 활성화
-1. 왼쪽 메뉴에서 "Authentication" 클릭 (또는 "빌드" → "Authentication")
+
+1. 왼쪽 메뉴에서 "Authentication" 클릭
 2. "시작하기" 또는 "Get started" 클릭
 
 ### 2.2 익명 로그인 활성화
+
 1. 상단 탭에서 "Sign-in method" 클릭
 2. "익명" 또는 "Anonymous" 찾기
 3. "익명" 행 클릭
-4. 오른쪽 토글 스위치를 켜기 (Enable)
+4. 오른쪽 토글 스위치를 **켜기** (Enable)
 5. "저장" 클릭
 
-✅ **확인**: Sign-in method 목록에서 "익명"이 "사용 설정됨"으로 표시되어야 합니다.
+✅ **확인**: "익명"이 "사용 설정됨"으로 표시되어야 합니다.
 
 ---
 
 ## 💾 Step 3: Firestore Database 생성
 
 ### 3.1 Firestore 생성
-1. 왼쪽 메뉴에서 "Firestore Database" 클릭 (또는 "빌드" → "Firestore Database")
+
+1. 왼쪽 메뉴에서 "Firestore Database" 클릭
 2. "데이터베이스 만들기" 또는 "Create database" 클릭
 
 ### 3.2 보안 규칙 선택
-1. "테스트 모드에서 시작" 또는 "Start in test mode" 선택
+
+1. **"테스트 모드에서 시작"** 선택
    - ⚠️ 주의: 프로덕션 배포 전에 반드시 보안 규칙을 업데이트해야 합니다
 2. "다음" 클릭
 
 ### 3.3 위치 선택
-1. Firestore 위치 선택 (예: `asia-northeast3 (Seoul)` 또는 가까운 지역)
+
+1. Firestore 위치 선택 (예: `asia-northeast3 (Seoul)`)
 2. "사용 설정" 클릭
 3. 데이터베이스 생성 완료까지 대기 (약 1-2분)
 
 ### 3.4 보안 규칙 업데이트 (중요!)
+
 1. 상단 탭에서 "규칙" 또는 "Rules" 클릭
 2. 기존 규칙을 다음으로 교체:
 
@@ -87,15 +130,17 @@ service cloud.firestore {
 ## 🌐 Step 4: Web App 추가 및 Config 가져오기
 
 ### 4.1 Web App 추가
-1. Firebase 프로젝트 대시보드 상단의 "프로젝트 개요" 옆 ⚙️ (톱니바퀴) 클릭
+
+1. 프로젝트 개요 옆 ⚙️ (톱니바퀴) 클릭
 2. "프로젝트 설정" 선택
 3. 아래로 스크롤하여 "내 앱" 섹션 찾기
-4. 웹 아이콘 `</>` 클릭 (iOS, Android 옆에 있음)
+4. 웹 아이콘 `</>` 클릭
 5. 앱 닉네임 입력: `knock-web`
-6. "Firebase Hosting도 설정" 체크박스는 선택하지 않음
+6. "Firebase Hosting도 설정" 체크박스는 **선택하지 않음**
 7. "앱 등록" 클릭
 
 ### 4.2 Firebase Config 복사
+
 다음과 같은 코드 블록이 나타납니다:
 
 ```javascript
@@ -119,16 +164,17 @@ const firebaseConfig = {
 ## 🤖 Step 5: Gemini API 키 발급
 
 ### 5.1 Google AI Studio 접속
-1. 새 탭에서 https://aistudio.google.com/ 접속
+
+1. https://aistudio.google.com/ 접속
 2. 같은 Google 계정으로 로그인
 
 ### 5.2 API 키 생성
+
 1. 왼쪽 메뉴에서 "Get API key" 클릭
 2. "Create API key" 버튼 클릭
 3. 기존 Google Cloud 프로젝트 선택 또는 새 프로젝트 생성
-   - 기존 프로젝트 선택 시: 방금 만든 Firebase 프로젝트 선택 가능
 4. "Create API key in existing project" 클릭
-5. API 키가 생성됩니다 (예: `AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`)
+5. API 키가 생성됩니다
 
 **중요**: API 키를 복사하여 안전한 곳에 저장하세요!
 
@@ -139,9 +185,11 @@ const firebaseConfig = {
 ## 📝 Step 6: .env.local 파일 업데이트
 
 ### 6.1 .env.local 파일 열기
+
 프로젝트 루트의 `.env.local` 파일을 텍스트 에디터로 엽니다.
 
 ### 6.2 Firebase Config 값 입력
+
 Step 4.2에서 복사한 Firebase Config 값으로 플레이스홀더를 교체합니다:
 
 ```env
@@ -159,6 +207,7 @@ NEXT_PUBLIC_GEMINI_API_KEY=AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 ```
 
 ### 6.3 파일 저장
+
 변경사항을 저장합니다 (Ctrl+S 또는 Cmd+S).
 
 ⚠️ **보안 주의사항**:
@@ -170,7 +219,6 @@ NEXT_PUBLIC_GEMINI_API_KEY=AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 ## ✅ Step 7: 연결 테스트
 
 ### 7.1 개발 서버 재시작
-터미널에서 개발 서버를 재시작합니다:
 
 ```bash
 # 현재 서버 종료 (Ctrl+C)
@@ -179,68 +227,66 @@ npm run dev
 ```
 
 ### 7.2 브라우저에서 확인
+
 1. http://localhost:3002 접속
-2. 온보딩 플로우 진행:
-   - 이름 입력
-   - 나이 입력
-   - "Enter the Building" 클릭
+2. 온보딩 플로우 진행
+3. "Enter the Building" 클릭
 
 ### 7.3 Firebase Console에서 확인
 
 #### Authentication 확인
 1. Firebase Console → Authentication → Users 탭
 2. 익명 사용자가 생성되었는지 확인
-   - User UID가 보여야 함
-   - Provider가 "Anonymous"여야 함
 
 #### Firestore 확인
 1. Firebase Console → Firestore Database → 데이터 탭
-2. 다음 컬렉션들이 생성되었는지 확인:
-   - `users` - 사용자 문서 1개
-   - (노크를 한 경우) `knocks` - 노크 기록
-   - (노크를 한 경우) `roommates` - 룸메이트 문서
+2. `users`, `roommates` 컬렉션 확인
 
 #### Gemini API 확인
 1. 앱에서 룸메이트와 대화 시도
-2. "Hi" 또는 "Hello" 메시지 전송
-3. AI 응답이 오는지 확인
-   - 응답이 오면: Gemini API 연결 성공 ✅
-   - "Sorry, I'm having trouble..." 메시지: API 키 확인 필요 ❌
+2. AI 응답이 오는지 확인
 
 ---
 
-## 🐛 문제 해결 (Troubleshooting)
+## 🐛 문제 해결
 
-### 문제 1: "Firebase: Error (auth/...)"
+### "Firebase: Error (auth/...)"
+
 **원인**: Firebase Config가 잘못 입력됨
+
 **해결**:
-1. `.env.local` 파일의 Firebase Config 값 재확인
-2. 공백이나 따옴표 없이 정확히 복사했는지 확인
+1. `.env.local` 파일의 값 재확인
+2. 공백이나 따옴표 없이 정확히 복사
 3. 서버 재시작
 
-### 문제 2: "Failed to register user"
+### "Failed to register user"
+
 **원인**: Authentication이 활성화되지 않음
+
 **해결**:
 1. Firebase Console → Authentication
 2. 익명 로그인이 "사용 설정됨"인지 확인
-3. 아니라면 Step 2 다시 수행
 
-### 문제 3: "Missing or insufficient permissions"
+### "Missing or insufficient permissions"
+
 **원인**: Firestore 보안 규칙 문제
+
 **해결**:
 1. Firebase Console → Firestore Database → 규칙
 2. Step 3.4의 규칙으로 업데이트
 3. "게시" 클릭
 
-### 문제 4: Gemini API 응답 없음
+### Gemini API 응답 없음
+
 **원인**: API 키가 잘못되었거나 할당량 초과
+
 **해결**:
 1. `.env.local`에서 `NEXT_PUBLIC_GEMINI_API_KEY` 확인
 2. Google AI Studio에서 API 키 재확인
 3. 할당량 확인: https://aistudio.google.com/app/apikey
 
-### 문제 5: 개발 서버가 시작되지 않음
-**원인**: 포트 3002가 이미 사용 중
+### 포트 이미 사용 중
+
 **해결**:
 ```bash
 # Windows
@@ -255,35 +301,23 @@ lsof -ti:3002 | xargs kill -9
 
 ## 📊 설정 완료 체크리스트
 
-설정이 완료되면 다음을 확인하세요:
-
-- [ ] Firebase 프로젝트 생성 완료
+- [ ] Firebase 프로젝트 생성
 - [ ] Authentication (익명 로그인) 활성화
-- [ ] Firestore Database 생성 완료
-- [ ] Firestore 보안 규칙 설정 완료
-- [ ] Web App 추가 및 Config 복사 완료
-- [ ] Gemini API 키 발급 완료
-- [ ] `.env.local` 파일 업데이트 완료
-- [ ] 개발 서버 재시작 완료
-- [ ] Firebase Console에서 익명 사용자 확인
-- [ ] Firestore에 사용자 문서 생성 확인
+- [ ] Firestore Database 생성
+- [ ] Firestore 보안 규칙 설정
+- [ ] Web App 추가 및 Config 복사
+- [ ] Gemini API 키 발급
+- [ ] `.env.local` 파일 업데이트
+- [ ] 개발 서버 재시작
+- [ ] Firebase Console에서 사용자 확인
+- [ ] Firestore에 데이터 생성 확인
 - [ ] Gemini AI 대화 응답 확인
 
-모든 항목이 체크되면 Firebase 설정이 완료되었습니다! 🎉
+모든 항목이 완료되면 설정이 끝났습니다! 🎉
 
 ---
 
-## 🚀 다음 단계
-
-Firebase 설정이 완료되면:
-
-1. **노크 시스템 완성** - 1일 1회 제한 및 자정 리셋
-2. **룸메이트 자동 생성** - Gemini AI 기반 동적 페르소나 생성
-3. **대화 메모리 시스템** - 이전 대화 기억 및 연속성
-
----
-
-## 💡 유용한 링크
+## 🔗 유용한 링크
 
 - [Firebase 공식 문서](https://firebase.google.com/docs)
 - [Firestore 시작 가이드](https://firebase.google.com/docs/firestore/quickstart)
@@ -294,5 +328,4 @@ Firebase 설정이 완료되면:
 
 ---
 
-**마지막 업데이트**: 2025-10-27
-**작성자**: Claude Code
+**마지막 업데이트**: 2025-10-28
