@@ -14,6 +14,15 @@ import roommateRoutes from './routes/roommate.routes';
 import chatRoutes from './routes/chat.routes';
 import agentRoutes from './routes/agent.routes';
 
+// Import admin routes
+import adminTemplatesRoutes from './routes/admin.templates.routes';
+import adminDataPoolRoutes from './routes/admin.datapool.routes';
+import adminMonitoringRoutes from './routes/admin.monitoring.routes';
+import adminAgentRoutes from './routes/admin.agent.routes';
+
+// Import middleware
+import { requireAdmin } from './middleware/auth';
+
 // Load environment variables
 dotenv.config();
 
@@ -77,6 +86,12 @@ app.use('/api/v1/onboarding', onboardingRoutes);
 app.use('/api/v1/roommate', roommateRoutes);
 app.use('/api/v1/chat', chatRoutes);
 app.use('/api/v1/agent', agentRoutes);
+
+// Admin Routes (protected with requireAdmin middleware)
+app.use('/api/v1/admin/templates', requireAdmin, adminTemplatesRoutes);
+app.use('/api/v1/admin/data-pool', requireAdmin, adminDataPoolRoutes);
+app.use('/api/v1/admin/monitoring', requireAdmin, adminMonitoringRoutes);
+app.use('/api/v1/admin/agent', requireAdmin, adminAgentRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {

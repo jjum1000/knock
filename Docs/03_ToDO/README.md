@@ -6,27 +6,34 @@
 
 ## 📋 개요
 
-이 폴더는 [COMPLETE_GUIDE.md](../01_Feature/02_Roommate/SystemPromptArchitecture/COMPLETE_GUIDE.md)를 기반으로 실제 구현 가능한 작업 지시서를 포함합니다.
+이 폴더는 [COMPLETE_GUIDE.md](../01_Feature/02_Roommate/SystemPromptArchitecture/COMPLETE_GUIDE.md)를 기반으로 **에이전트 기반 자동화 시스템**의 실제 구현 가능한 작업 지시서를 포함합니다.
+
+**핵심 철학**:
+- 관리자는 **템플릿, 데이터 풀, Agent 설정**만 관리
+- 실제 캐릭터/이미지 생성은 **5개 자동 Agent**가 수행
+- 모든 생성 과정은 **agent_jobs 테이블로 추적 가능**
 
 ---
 
 ## 📚 문서 목록
 
-### 1. [관리자 페이지 상세 설계](./01_ADMIN_PAGE_SPEC.md)
-**내용**: 룸메이트 캐릭터 생성 및 시스템 프롬프트 관리를 위한 관리자 대시보드
+### 1. [관리자 페이지 상세 설계](./01_ADMIN_PAGE_SPEC.md) ⭐ Agent-Based
+**내용**: Agent 시스템 관리를 위한 관리자 대시보드
 
 **주요 섹션**:
-- 캐릭터 생성 마법사 (7단계)
-  - Step 1: 근원적 욕구 설정 (WHY)
-  - Step 2: 환경과 경험 (개인사)
-  - Step 3: 트라우마와 학습
-  - Step 4: 발현된 욕구
-  - Step 5: 생존 전략 (HOW)
-  - Step 6: 성격 특성
-  - Step 7: 대화 패턴 (WHAT)
-- 시스템 프롬프트 생성 및 미리보기
-- 이미지 생성 통합
-- 데이터 관리 (캐릭터 목록, 템플릿)
+- **템플릿 관리** (Agent 3이 사용)
+  - 시스템 프롬프트 템플릿 CRUD
+  - Handlebars 변수 정의
+  - 미리보기 기능
+- **데이터 풀 관리** (Agent 2, 4가 사용)
+  - 경험 데이터 풀 (과거 경험)
+  - 아키타입 데이터 풀 (캐릭터 유형)
+  - 시각적 요소 데이터 풀 (이미지 요소)
+- **Agent 모니터링**
+  - 실행 현황 대시보드
+  - 품질 점수 분석
+  - 실패 로그 확인
+- **수동 Agent 실행** (테스트용)
 
 **기술 스택**:
 - Frontend: Next.js 14 + shadcn/ui
@@ -35,23 +42,34 @@
 
 ---
 
-### 2. [캐릭터 생성 플로우](./02_CHARACTER_GENERATOR_FLOW.md)
-**내용**: WHY-HOW-WHAT 기반 자동 캐릭터 생성 프로세스
+### 2. [캐릭터 생성 플로우](./02_CHARACTER_GENERATOR_FLOW.md) ⭐ Agent-Based
+**내용**: 5개 자동 Agent 파이프라인 (10-15초 내 완료)
 
-**Phase 구성**:
-1. Presence Vector 추출 (사용자가 하는 것)
-2. Frequency-Deficiency 분석 (많이 보는 것 = 결핍)
-3. Deficiency Vector 추출 (하지 않는 것 → 숨겨진 욕구)
-4. Complete Vector 생성 (Observed + Hidden = Actual)
-5. 역설 발견 (충돌하는 욕구 쌍)
-6. 보완 룸메이트 설계
-7. 시스템 프롬프트 조립
-8. 이미지 프롬프트 생성
+**Agent 구성**:
+1. **Agent 1: Need Vector Analysis** (Gemini LLM)
+   - 온보딩 데이터 → 6가지 욕구 벡터 추출
+   - Presence/Deficiency/Paradox 분석
 
-**핵심 알고리즘**:
-- 다각도 해석 (편향 회피)
-- 빈도-결핍 원칙
-- 역설적 욕구 조합
+2. **Agent 2: Character Profile Generation** (LLM + 데이터 풀)
+   - 욕구 벡터 → 아키타입 선택
+   - 데이터 풀에서 경험 선택
+   - 캐릭터 프로파일 생성
+
+3. **Agent 3: System Prompt Assembly** (Handlebars)
+   - 템플릿 + 변수 → 시스템 프롬프트 조립
+   - WHY-HOW-WHAT 구조 완성
+
+4. **Agent 4: Image Prompt Generation** (규칙 기반)
+   - 욕구 벡터 → 시각적 언어 매핑
+   - 데이터 풀에서 시각 요소 선택
+
+5. **Agent 5: Image Generation** (Gemini Imagen)
+   - 이미지 프롬프트 → 픽셀아트 생성
+
+**핵심 기능**:
+- 완전 자동화 (관리자 개입 불필요)
+- 품질 검증 시스템
+- Fallback 전략 (각 Agent별)
 
 ---
 
@@ -99,37 +117,48 @@
 
 ---
 
-### 5. [API 명세서](./05_API_SPECIFICATIONS.md)
+### 5. [API 명세서](./05_API_SPECIFICATIONS.md) ⭐ Agent-Based
 **내용**: 전체 시스템 REST API 엔드포인트
 
 **API 그룹**:
 1. **온보딩 API**
    - `POST /onboarding/save`
-   - `POST /onboarding/complete`
+   - `POST /onboarding/complete` (Agent Pipeline 트리거)
 
-2. **관리자 - 캐릭터 관리**
-   - `GET /admin/characters` (목록)
-   - `GET /admin/characters/:id` (상세)
-   - `POST /admin/characters` (생성)
-   - `POST /admin/characters/auto-generate` (자동 생성)
-   - `PATCH /admin/characters/:id` (수정)
-   - `DELETE /admin/characters/:id` (삭제)
+2. **관리자 - Agent 실행** (신규)
+   - `POST /admin/agent/execute` (수동 Agent 실행)
+   - `GET /admin/agent/jobs/:jobId` (작업 상태 조회)
+   - `GET /admin/agent/jobs` (작업 목록)
+   - `POST /admin/agent/jobs/:jobId/retry` (재시도)
 
-3. **관리자 - 이미지 생성**
-   - `POST /admin/characters/:id/generate-image`
-   - `POST /admin/characters/:id/preview-image-prompt`
+3. **관리자 - 템플릿 관리** (신규)
+   - `GET /admin/templates` (템플릿 목록)
+   - `GET /admin/templates/:id` (템플릿 상세)
+   - `POST /admin/templates` (템플릿 생성)
+   - `PATCH /admin/templates/:id` (템플릿 수정)
+   - `DELETE /admin/templates/:id` (템플릿 삭제)
+   - `POST /admin/templates/:id/preview` (미리보기)
 
-4. **사용자 - 룸메이트**
-   - `GET /roommate` (내 룸메이트)
+4. **관리자 - 데이터 풀 관리** (신규)
+   - `GET/POST /admin/data-pool/experiences`
+   - `GET/POST /admin/data-pool/archetypes`
+   - `GET/POST /admin/data-pool/visuals`
+
+5. **관리자 - 모니터링** (신규)
+   - `GET /admin/monitoring/dashboard` (대시보드 통계)
+   - `GET /admin/monitoring/quality` (품질 분석)
+
+6. **사용자 - 룸메이트**
+   - `GET /roommate` (내 룸메이트 + generation_job_id)
    - `GET /roommate/profile` (상세)
    - `PATCH /roommate/preferences` (선호도)
    - `PATCH /roommate/keywords` (키워드 - 유료)
 
-5. **사용자 - 방 관리**
+7. **사용자 - 방 관리**
    - `GET /rooms/my-rooms`
    - `GET /rooms/:roomId`
 
-6. **대화 시스템**
+8. **대화 시스템**
    - `GET /chat/first-message/:personaId`
    - `POST /chat/message`
    - `GET /chat/history/:personaId`
@@ -141,88 +170,137 @@
 
 ---
 
-### 6. [데이터베이스 스키마](./06_DATABASE_SCHEMA.md)
-**내용**: PostgreSQL + Prisma ORM 기반 스키마
+### 6. [데이터베이스 스키마](./06_DATABASE_SCHEMA.md) ⭐ Agent-Based
+**내용**: PostgreSQL + Prisma ORM 기반 스키마 (11개 테이블)
 
-**테이블**:
+**핵심 테이블**:
 1. `users` - 사용자
 2. `onboarding_data` - 온보딩 데이터
-3. `personas` - 룸메이트/이웃 캐릭터
-4. `rooms` - 방
+3. `personas` - **Agent가 생성한** 룸메이트/이웃
+4. `rooms` - **Agent가 생성한** 방 이미지
 5. `chat_messages` - 대화 메시지
-6. `admin_characters` - 관리자 캐릭터 템플릿
-7. `prompt_templates` - 프롬프트 템플릿
+
+**Agent 시스템 테이블** (신규):
+6. `prompt_templates` - **관리자가 관리하는** 템플릿
+7. `data_pool_experiences` - **Agent 2가 사용할** 경험 데이터
+8. `data_pool_archetypes` - **Agent 2가 사용할** 아키타입
+9. `data_pool_visuals` - **Agent 4가 사용할** 시각 요소
+10. `agent_jobs` - **Agent 실행 추적**
+11. `agent_job_logs` - **Agent 실행 로그 상세**
 
 **특징**:
-- JSONB 활용 (유연한 스키마)
+- JSONB 활용 (욕구 벡터, 캐릭터 프로파일)
 - GIN 인덱스 (배열/JSONB 검색)
+- generation_job_id (모든 생성물 추적 가능)
 - Vector 임베딩 (pgvector - 향후 메모리 시스템)
-- 트리거 (자동 업데이트)
 
 **무결성**:
 - 사용자당 룸메이트 1개 제약
+- Agent 작업 추적 외래키
 - 위치 중복 방지
-- 키워드 개수 제한
 
 ---
 
-## 🔄 구현 순서
+## 🔄 구현 순서 (Agent-Based)
 
 ### Phase 1: 기반 구축 (1-2주)
-1. ✅ 문서 작성 완료
-2. [ ] 데이터베이스 스키마 마이그레이션
-3. [ ] 기본 API 엔드포인트 구현
-4. [ ] 온보딩 완료 → 룸메이트 생성 플로우 구현
+1. ✅ 문서 작성 완료 (Agent 기반 아키텍처)
+2. [ ] **데이터베이스 스키마 마이그레이션** (11개 테이블)
+   - Prisma schema.prisma 작성
+   - 초기 마이그레이션 실행
+3. [ ] **시드 데이터 생성**
+   - 기본 프롬프트 템플릿 1개
+   - 경험 데이터 풀 50개
+   - 아키타입 데이터 풀 10개
+   - 시각적 요소 데이터 풀 100개
+4. [ ] 기본 API 엔드포인트 구현
 
-### Phase 2: 자동 생성 시스템 (2-3주)
-1. [ ] Presence/Deficiency Vector 추출 로직
-2. [ ] 시스템 프롬프트 자동 조립
-3. [ ] Gemini API 통합 (LLM 분석)
-4. [ ] 품질 검증 시스템
+### Phase 2: Agent 시스템 구현 (3-4주) ⭐ 핵심
+1. [ ] **Agent 1: Need Vector Analysis**
+   - Gemini 1.5 Pro 통합
+   - 욕구 벡터 추출 로직
+   - Presence/Deficiency 분석
+2. [ ] **Agent 2: Character Profile Generation**
+   - 데이터 풀 선택 로직
+   - 아키타입 매칭 알고리즘
+   - 캐릭터 프로파일 생성
+3. [ ] **Agent 3: System Prompt Assembly**
+   - Handlebars 템플릿 엔진
+   - 변수 채우기 로직
+4. [ ] **Agent 4: Image Prompt Generation**
+   - 욕구 → 시각적 언어 매핑
+   - 데이터 풀 시각 요소 선택
+5. [ ] **Agent 5: Image Generation**
+   - Gemini Imagen 3.0 통합
+   - 품질 검증 시스템
+   - Fallback 프리셋 이미지
 
-### Phase 3: 이미지 생성 (1-2주)
-1. [ ] 욕구 → 시각적 언어 매핑
-2. [ ] Gemini Imagen API 통합
-3. [ ] 프리셋 이미지 5개 제작
-4. [ ] Fallback 시스템 구현
+### Phase 3: Agent 파이프라인 통합 (1-2주)
+1. [ ] 5개 Agent 순차 실행 오케스트레이션
+2. [ ] agent_jobs 테이블 로깅
+3. [ ] 품질 점수 계산 로직
+4. [ ] 에러 핸들링 & Retry 로직
+5. [ ] 온보딩 완료 → Agent Pipeline 트리거
 
 ### Phase 4: 관리자 페이지 (2-3주)
-1. [ ] Next.js 관리자 UI 구현
-2. [ ] 7단계 캐릭터 생성 마법사
-3. [ ] 시스템 프롬프트 미리보기
-4. [ ] 템플릿 관리 시스템
+1. [ ] **템플릿 관리 UI**
+   - 템플릿 CRUD
+   - Handlebars 에디터
+   - 미리보기 기능
+2. [ ] **데이터 풀 관리 UI**
+   - 경험/아키타입/시각 요소 CRUD
+   - 가중치 조정
+3. [ ] **Agent 모니터링 대시보드**
+   - 실행 현황 차트
+   - 품질 점수 분석
+   - 실패 로그 뷰어
+4. [ ] 수동 Agent 실행 기능 (테스트용)
 
 ### Phase 5: 최초방 & 메인 화면 (1주)
-1. [ ] 방 그리드 렌더링
-2. [ ] 첫 인사말 모달
+1. [ ] 방 그리드 렌더링 (Agent 생성 이미지)
+2. [ ] 첫 인사말 모달 (generation_job_id 표시)
 3. [ ] 픽셀아트 스타일 적용
-4. [ ] 성능 최적화
+4. [ ] 성능 최적화 (10-15초 목표)
 
-### Phase 6: 테스트 & 배포 (1주)
-1. [ ] 단위 테스트
-2. [ ] 통합 테스트
-3. [ ] 성능 테스트
-4. [ ] 프로덕션 배포
+### Phase 6: 테스트 & 배포 (1-2주)
+1. [ ] Agent 단위 테스트
+2. [ ] Agent 파이프라인 통합 테스트
+3. [ ] 품질 검증 테스트 (100회 생성)
+4. [ ] 성능 테스트 (동시 실행)
+5. [ ] 프로덕션 배포
 
-**총 예상 기간**: 8-12주
+**총 예상 기간**: 9-14주 (Agent 시스템 복잡도 반영)
 
 ---
 
-## 📊 예상 리소스
+## 📊 예상 리소스 (Agent-Based)
 
 ### 인력
-- **백엔드 개발자**: 1명 (Node.js, TypeScript, Prisma)
-- **프론트엔드 개발자**: 1명 (Next.js, React, Tailwind)
-- **AI/ML 엔지니어**: 0.5명 (LLM 프롬프트 엔지니어링)
+- **백엔드 개발자**: 1-2명 (Node.js, TypeScript, Prisma)
+  - Agent 시스템 개발
+  - 파이프라인 오케스트레이션
+  - API 엔드포인트 구현
+- **프론트엔드 개발자**: 1명 (Next.js, React, shadcn/ui)
+  - 관리자 대시보드 (템플릿, 데이터 풀, 모니터링)
+  - 사용자 화면
+- **AI/ML 엔지니어**: 1명 (LLM 프롬프트 엔지니어링) ⭐ 핵심
+  - Agent 프롬프트 최적화
+  - 품질 검증 로직 설계
+  - 데이터 풀 초기 구축
 - **디자이너**: 0.5명 (픽셀아트 프리셋 제작)
 
 ### 비용
-- **Gemini API** (LLM 분석): $0.001/1K tokens → ~$50/월 (예상)
-- **Gemini Imagen** (이미지 생성): $0.020/image → ~$20/월 (신규 100명)
-- **서버**: AWS/GCP → ~$100/월
-- **데이터베이스**: PostgreSQL (Managed) → ~$50/월
+- **Gemini 1.5 Pro** (Agent 1, 2):
+  - Input: $0.00125/1K tokens
+  - Output: $0.005/1K tokens
+  - 예상: ~$3/사용자 생성 → $300/월 (100명)
+- **Gemini Imagen 3.0** (Agent 5):
+  - $0.020/image → $20/월 (100명, 캐싱 활용)
+- **서버**: AWS/GCP → ~$150/월 (Agent 실행 부하)
+- **데이터베이스**: PostgreSQL (Managed) → ~$80/월 (로그 저장)
 
-**총 예상 비용**: ~$220/월 (초기, 100명 기준)
+**총 예상 비용**: ~$550/월 (초기, 100명 기준)
+**확장 후**: ~$3,000/월 (1,000명 기준)
 
 ---
 
