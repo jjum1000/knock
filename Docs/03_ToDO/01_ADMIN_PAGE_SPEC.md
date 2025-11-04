@@ -1,7 +1,7 @@
 # 관리자 페이지 상세 설계서 (Agent-Based Architecture)
 **작성일**: 2025-10-28 (최종 수정: 2025-11-04)
 **목적**: 에이전트 기반 자동 생성 시스템 - 관리자는 프롬프트와 I/O만 관리
-**구현 상태**: Phase 1-3 완료 ✅ (백엔드 API + 프론트엔드 Foundation + 템플릿 관리 UI)
+**구현 상태**: Phase 1-5 UI 완료 ✅ | **Firebase 백엔드 전환 중** 🔄 (Express→Firebase Functions)
 
 ---
 
@@ -11,10 +11,12 @@
 캐릭터 생성, 욕구 분석, 이미지 생성 등 모든 실행은 **에이전트가 자동으로 수행**합니다.
 
 ### 🎯 구현 진행 상황 (2025-11-04 기준)
-- ✅ **Phase 1 완료**: 백엔드 Admin API (38 endpoints) - 커밋: `19ffb39`
-- ✅ **Phase 2 완료**: 프론트엔드 Foundation (Layout, Dashboard, API 통합) - 커밋: `879fba4`
-- ✅ **Phase 3 완료**: 템플릿 관리 UI (Monaco Editor, 실시간 미리보기) - 3시간 소요
-- 📋 **Phase 4-6**: 모니터링, 데이터 풀, 테스트 (6-11주 예상)
+- 🔄 **Phase 1 전환 중**: ~~Express REST API~~ → **Firebase Functions** (55개 함수)
+- ✅ **Phase 2 완료**: 프론트엔드 Foundation (Layout, Dashboard) - 커밋: `879fba4`
+- ✅ **Phase 3 완료**: 템플릿 관리 UI (Monaco Editor, 실시간 미리보기)
+- ✅ **Phase 4 완료**: 모니터링 대시보드 (Recharts, 실시간 차트)
+- ✅ **Phase 5 완료**: 데이터 풀 관리 (3개 풀 × CRUD UI)
+- 🔄 **Firebase 전환**: Express 백엔드 → Firebase Functions + Firestore로 마이그레이션 진행 중
 
 ---
 
@@ -731,130 +733,259 @@ GET /api/v1/admin/data-pool/visual-elements
 
 ---
 
-## 8. 데이터베이스 스키마 (간소화)
+## 8. Firestore 데이터 모델
 
-### 8.1 prompt_templates (템플릿)
+> **Note**: ~~PostgreSQL + Prisma~~ → **Firestore (NoSQL)** 전환 완료
 
-```sql
-CREATE TABLE prompt_templates (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+### 8.1 Root Collection: prompt_templates/
 
-  name VARCHAR(255) NOT NULL,
-  version VARCHAR(20) NOT NULL,
+```typescript
+// Document: prompt_templates/{templateId}
+interface PromptTemplateDoc {
+  name: string
+  version: string
+  description: string
 
-  -- 템플릿 섹션 (JSONB)
-  sections JSONB NOT NULL,
+  // 템플릿 섹션들
+  sections: {
+    why: string
+    past: string
+    trauma: string
+    how: string
+    personality: string
+    what: string
+    relationship: string
+  }
 
-  -- 변수 정의
-  variables JSONB NOT NULL,
+  // 변수 정의
+  variables: Array<{
+    name: string
+    type: 'string' | 'number' | 'boolean' | 'array' | 'object'
+    required: boolean
+    defaultValue?: any
+  }>
 
-  -- 에이전트 지시사항
-  agent_instructions TEXT,
+  // 에이전트 지시사항
+  agentInstructions: string
 
-  -- 메타
-  is_active BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
+  // 메타
+  isActive: boolean
+  isDefault: boolean
+  createdAt: Timestamp
+  updatedAt: Timestamp
+  createdBy: string  // Admin user ID
+}
+
+// Firestore Composite Indexes:
+// - isActive ASC, createdAt DESC
+// - isDefault ASC, isActive ASC
 ```
 
-### 8.2 data_pool_experiences (경험 풀)
+### 8.2 Root Collection: data_pools/
 
-```sql
-CREATE TABLE data_pool_experiences (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+```typescript
+// Subcollection: data_pools/experiences/items/{experienceId}
+interface ExperienceDoc {
+  category: 'belonging' | 'recognition' | 'growth' | 'autonomy' | 'security' | 'meaning'
+  title: string
+  event: string
+  ageRange: {
+    min: number
+    max: number
+  }
+  learnings: string[]
 
-  category VARCHAR(50) NOT NULL,
-  title VARCHAR(255) NOT NULL,
-  event TEXT NOT NULL,
-  age_range INT[2] NOT NULL,  -- [13, 15]
-  learnings TEXT[] NOT NULL,
+  // 트리거 조건
+  triggers: {
+    needs: string[]
+    keywords: string[]
+    priority: number  // 1-10
+  }
 
-  -- 트리거 조건 (JSONB)
-  triggers JSONB NOT NULL,
+  isActive: boolean
+  createdAt: Timestamp
+}
 
-  created_at TIMESTAMP DEFAULT NOW()
-);
+// Subcollection: data_pools/archetypes/items/{archetypeId}
+interface ArchetypeDoc {
+  name: string
+  displayName: string
+  matchingNeeds: string[]
+
+  // 시각적 요소
+  visualElements: {
+    objects: Array<{
+      name: string
+      weight: number
+      requirement?: string
+    }>
+    colors: {
+      primary: string
+      secondary: string
+      accent: string
+    }
+    lighting: string
+    mood: string
+  }
+
+  // 대화 스타일
+  conversationStyle: {
+    length: 'short' | 'medium' | 'long'
+    speed: 'fast' | 'medium' | 'slow'
+    tone: 'light' | 'neutral' | 'serious'
+    characteristics: string[]
+  }
+
+  isActive: boolean
+  createdAt: Timestamp
+}
+
+// Subcollection: data_pools/visuals/items/{visualId}
+interface VisualElementDoc {
+  category: 'object' | 'color' | 'lighting' | 'mood'
+  name: string
+  description: string
+  promptFragment: string
+  weight: number  // 0-1
+  relatedNeeds: string[]
+  isActive: boolean
+  createdAt: Timestamp
+}
+
+// Firestore Composite Indexes:
+// data_pools/experiences/items: isActive ASC, category ASC, createdAt DESC
+// data_pools/archetypes/items: isActive ASC, createdAt DESC
+// data_pools/visuals/items: isActive ASC, category ASC, weight DESC
 ```
 
-### 8.3 data_pool_archetypes (아키타입 풀)
+### 8.3 Root Collection: agent_jobs/
 
-```sql
-CREATE TABLE data_pool_archetypes (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+```typescript
+// Document: agent_jobs/{jobId}
+interface AgentJobDoc {
+  jobType: 'character_generation' | 'manual_test'
+  status: 'pending' | 'running' | 'completed' | 'failed'
+  userId: string
 
-  name VARCHAR(100) NOT NULL,
-  matching_needs TEXT[] NOT NULL,
+  // 입출력
+  input: {
+    onboardingData?: any
+    templateId?: string
+    config?: any
+  }
+  output: {
+    persona?: any
+    rooms?: any[]
+    systemPrompt?: string
+    imageUrl?: string
+  } | null
 
-  -- 시각적 요소 (JSONB)
-  visual_elements JSONB NOT NULL,
+  // 성능 지표
+  executionTimeMs: number | null
+  qualityScore: number | null  // 0-100
 
-  -- 대화 스타일 (JSONB)
-  conversation_style JSONB NOT NULL,
+  // 에러
+  errorMessage: string | null
+  errorStep: string | null  // 실패한 Agent 이름
 
-  created_at TIMESTAMP DEFAULT NOW()
-);
+  // 타임스탬프
+  startedAt: Timestamp
+  completedAt: Timestamp | null
+  createdAt: Timestamp
+}
+
+// Subcollection: agent_jobs/{jobId}/logs/{logId}
+interface AgentLogDoc {
+  agentName: 'Agent 1' | 'Agent 2' | 'Agent 3' | 'Agent 4' | 'Agent 5'
+  step: number  // 1-5
+  status: 'pending' | 'running' | 'completed' | 'failed'
+
+  input: any
+  output: any | null
+
+  startedAt: Timestamp
+  completedAt: Timestamp | null
+  durationMs: number | null
+
+  errorMessage: string | null
+}
+
+// Firestore Composite Indexes:
+// - userId ASC, status ASC, createdAt DESC
+// - status ASC, createdAt DESC
+// - userId ASC, createdAt DESC
+
+// Security: Only admin and job owner can read
 ```
 
-### 8.4 agent_execution_logs (실행 로그)
+### 8.4 실시간 구독 패턴
 
-```sql
-CREATE TABLE agent_execution_logs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+```typescript
+// Frontend: Real-time job monitoring
+import { doc, onSnapshot } from 'firebase/firestore'
 
-  job_id VARCHAR(50) UNIQUE NOT NULL,
-  user_id UUID REFERENCES users(id),
+const jobRef = doc(db, 'agent_jobs', jobId)
+const unsubscribe = onSnapshot(jobRef, (snapshot) => {
+  const job = snapshot.data()
+  if (job.status === 'completed') {
+    // Update UI
+  }
+})
 
-  -- 입출력
-  input JSONB NOT NULL,
-  output JSONB,
-
-  -- 상태
-  status VARCHAR(20) NOT NULL,  -- 'processing', 'completed', 'failed'
-  error_message TEXT,
-
-  -- 성능
-  execution_time_ms INT,
-  quality_score INT,
-
-  -- 로그
-  logs JSONB,
-
-  started_at TIMESTAMP DEFAULT NOW(),
-  completed_at TIMESTAMP
-);
-
-CREATE INDEX idx_agent_logs_job_id ON agent_execution_logs(job_id);
-CREATE INDEX idx_agent_logs_status ON agent_execution_logs(status);
-CREATE INDEX idx_agent_logs_user_id ON agent_execution_logs(user_id);
+// Frontend: Real-time logs
+const logsRef = collection(db, `agent_jobs/${jobId}/logs`)
+const q = query(logsRef, orderBy('step', 'asc'))
+onSnapshot(q, (snapshot) => {
+  const logs = snapshot.docs.map(doc => doc.data())
+  // Update timeline UI
+})
 ```
 
 ---
 
 ## 9. 구현 우선순위
 
-### ✅ Phase 1: 백엔드 Admin API 구현 (완료 - 2025-11-04)
-**소요 시간**: ~4시간 | **커밋**: `19ffb39`
+### 🔄 Phase 1: 백엔드 Firebase 전환 (진행 중 - 2025-11-04)
+**상태**: Express REST API → Firebase Functions 마이그레이션
 
-1. ✅ **관리자 API 엔드포인트 구현** (38개)
-   - 템플릿 관리 API (7 endpoints)
-   - 데이터 풀 관리 API (18 endpoints)
-   - 모니터링 API (6 endpoints)
-   - Agent 실행 API (7 endpoints)
+> **Note**: 초기 Express.js 백엔드는 Firebase 아키텍처와 맞지 않아 폐기하고 Firebase로 전환 중
 
-2. ✅ **인증 & 보안**
-   - requireAdmin 미들웨어
-   - JWT 인증
-   - Zod 검증
+**Firebase Functions 구조** (55개 함수 예정):
+1. **Admin - Templates** (7개 Callable Functions)
+   - `getTemplates`, `getTemplate`, `createTemplate`, `updateTemplate`
+   - `deleteTemplate`, `testTemplate`
 
-3. ✅ **에러 핸들링**
-   - 중앙 집중식 에러 처리
-   - 상세한 에러 메시지
+2. **Admin - Data Pools** (18개 Callable Functions)
+   - Experiences: `getExperiences`, `createExperience`, `updateExperience`, etc.
+   - Archetypes: `getArchetypes`, `createArchetype`, `updateArchetype`, etc.
+   - Visuals: `getVisuals`, `createVisual`, `updateVisual`, etc.
 
-**결과물**:
-- 4개 route 파일 (~1,840 lines)
-- 완전한 REST API 백엔드
-- 문서: [backend/ADMIN_API_IMPLEMENTATION.md](../../backend/ADMIN_API_IMPLEMENTATION.md)
+3. **Admin - Monitoring** (6개: 3 Callable + 3 Client Queries)
+   - `getDashboardStats`, `getQualityAnalysis`, `getPerformanceMetrics`
+   - 나머지는 Firestore 직접 쿼리 (실시간 리스너)
+
+4. **Admin - Agent Execution** (7개 Functions)
+   - `executeAgentManual`, `retryAgentJob`, `cancelAgentJob`
+   - Pub/Sub Trigger: `agentPipelineOrchestrator`
+
+5. **User APIs** (10개 Functions + Client Queries)
+   - Onboarding: `completeOnboarding` (Pub/Sub 트리거)
+   - Roommate: `updateKeywords`, `deleteRoommate`
+   - Chat: `generateFirstMessage`, `sendMessage`
+
+6. **Agent Pipeline** (5개 Background Functions)
+   - `agent1NeedVector`, `agent2CharacterProfile`, `agent3PromptAssembly`
+   - `agent4ImagePrompt`, `agent5ImageGeneration`
+
+7. **Firestore Triggers** (자동 실행)
+   - `onNewMessage`: 메시지 카운트 업데이트
+   - `onJobComplete`: 사용자 통계 업데이트
+
+**인증 & 보안**:
+- Firebase Authentication (Custom Claims for admin)
+- Firestore Security Rules
+- Firebase App Check (rate limiting)
+- Zod 검증 (Functions 내부)
 
 ---
 
@@ -871,10 +1002,10 @@ CREATE INDEX idx_agent_logs_user_id ON agent_execution_logs(user_id);
    - AdminHeader (breadcrumbs)
    - Protected routes
 
-3. ✅ **API 통합 레이어**
-   - adminApi.ts (35 API 메서드)
-   - TypeScript 타입 정의
-   - Axios 인터셉터
+3. 🔄 **API 통합 레이어** (Firebase로 재작성 필요)
+   - ~~adminApi.ts (Axios REST)~~ → Firebase SDK로 전환 예정
+   - Firebase Callable Functions 호출
+   - Firestore 실시간 리스너
 
 4. ✅ **상태 관리**
    - Zustand store

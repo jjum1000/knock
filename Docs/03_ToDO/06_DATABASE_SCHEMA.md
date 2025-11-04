@@ -1,114 +1,199 @@
 # 데이터베이스 스키마 (Agent-Based)
-**작성일**: 2025-10-28
+**작성일**: 2025-10-28 (최종 수정: 2025-11-04)
 **목적**: 에이전트 기반 룸메이트 시스템 데이터베이스 설계
+**상태**: 🔄 PostgreSQL → Firestore 전환 중
+
+> ⚠️ **아키텍처 전환**: ~~PostgreSQL + Prisma ORM~~ → **Firebase Firestore (NoSQL)**
+>
+> **전환 가이드**: [FIREBASE_MIGRATION.md](./FIREBASE_MIGRATION.md) 참고
 
 ---
 
 ## 📋 개요
 
-PostgreSQL 15 + Prisma ORM 기반 데이터베이스 스키마를 정의합니다.
+**Firebase Firestore** 기반 NoSQL 데이터베이스 스키마를 정의합니다.
 
 **핵심 철학**:
 - 관리자는 **템플릿, I/O 스키마, 데이터 풀**만 관리
 - 실제 캐릭터 생성은 **5개 자동 에이전트**가 수행
 - 모든 생성 과정은 **로그로 추적 가능**
 
----
-
-## 🗄️ ERD (Entity Relationship Diagram)
-
-```
-┌──────────────┐        ┌──────────────────┐
-│    users     │───────<│  personas        │
-│              │        │  (auto-generated)│
-│ - id         │        │                  │
-│ - email      │        │ - system_prompt  │
-│ - isPremium  │        │ - generation_job │
-└──────────────┘        └─────────┬────────┘
-       │                          │
-       │                          │
-       │                ┌─────────▼────────┐
-       └───────────────<│     rooms        │
-                        │                  │
-                        │ - image_url      │
-                        │ - image_job_id   │
-                        └──────────────────┘
-                                 │
-                                 │
-                        ┌────────▼─────────┐
-                        │  chat_messages   │
-                        │                  │
-                        │ - content        │
-                        └──────────────────┘
-
-┌───────────────────────────────────────────────────────┐
-│              AGENT SYSTEM TABLES                      │
-└───────────────────────────────────────────────────────┘
-
-┌────────────────────────┐
-│  prompt_templates      │  (관리자가 관리하는 템플릿)
-│                        │
-│ - id, name, version    │
-│ - sections (JSON)      │  ← WHY/HOW/WHAT 섹션
-│ - variables (JSON)     │  ← 동적 변수 정의
-│ - agent_instructions   │  ← 에이전트 지시사항
-└────────────────────────┘
-
-┌────────────────────────┐
-│  data_pool_experiences │  (과거 경험 데이터 풀)
-│                        │
-│ - need_type            │  ← 'belonging', 'recognition'
-│ - title, description   │
-│ - intensity            │
-│ - tags[]               │
-└────────────────────────┘
-
-┌────────────────────────┐
-│  data_pool_archetypes  │  (아키타입 데이터 풀)
-│                        │
-│ - name                 │  ← 'developer_gamer'
-│ - need_profile (JSON)  │  ← 욕구 프로파일
-│ - behaviors (JSON)     │  ← 행동 패턴
-│ - keywords[]           │
-└────────────────────────┘
-
-┌─────────────────────────┐
-│  data_pool_visuals      │  (시각적 요소 데이터 풀)
-│                         │
-│ - need_type             │  ← 'survival', 'growth'
-│ - element_type          │  ← 'color', 'object', 'mood'
-│ - value                 │  ← '#FF5722', 'plant', 'warm'
-│ - description           │
-└─────────────────────────┘
-
-┌────────────────────────┐
-│  agent_jobs            │  (에이전트 실행 기록)
-│                        │
-│ - id, status           │
-│ - input (JSON)         │
-│ - output (JSON)        │
-│ - logs[]               │
-│ - execution_time_ms    │
-└────────────────────────┘
-
-┌────────────────────────┐
-│  agent_job_logs        │  (에이전트 실행 로그 상세)
-│                        │
-│ - job_id               │
-│ - agent_name           │
-│ - step, status         │
-│ - input/output (JSON)  │
-│ - error                │
-└────────────────────────┘
-```
+**Firestore vs PostgreSQL 주요 차이**:
+- ~~SQL 테이블~~ → **Firestore 컬렉션 (Collections)**
+- ~~외래 키 (Foreign Keys)~~ → **문서 참조 (Document References)**
+- ~~JOIN~~ → **비정규화 (Denormalization)** 또는 **클라이언트 측 조인**
+- ~~트랜잭션 (ACID)~~ → **Firestore 트랜잭션 (제한적)**
+- ~~인덱스~~ → **Composite Indexes (firestore.indexes.json)**
 
 ---
 
-## 📊 테이블 정의
+## 🗄️ Firestore 컬렉션 구조
 
-### 1. users (사용자)
+```
+Root Collections:
 
-```sql
+├─ users/                           (Firebase Auth 사용자)
+│  └─ {userId}/                      ← Firebase Auth UID
+│     ├─ email: string
+│     ├─ displayName: string
+│     ├─ isAdmin: boolean           ← Custom Claims로도 관리
+│     ├─ isPremium: boolean
+│     ├─ premiumExpiresAt: Timestamp
+│     ├─ onboardingCompleted: boolean
+│     └─ createdAt: Timestamp
+│
+├─ onboarding_data/                 (온보딩 데이터)
+│  └─ {userId}/                      ← 사용자 UID를 문서 ID로 사용
+│     ├─ domains: string[]
+│     ├─ keywords: string[]
+│     ├─ interests: string[]
+│     ├─ conversationStyle: string
+│     └─ updatedAt: Timestamp
+│
+├─ personas/                        (룸메이트/이웃 - Agent 생성)
+│  └─ {personaId}/
+│     ├─ userId: string              ← 참조 (users/{userId})
+│     ├─ personaType: 'roommate' | 'neighbor'
+│     ├─ name: string
+│     ├─ archetype: string
+│     ├─ systemPrompt: string
+│     ├─ templateId: string          ← 참조 (prompt_templates/{id})
+│     ├─ needVectors: map
+│     ├─ characterProfile: map
+│     ├─ generationJobId: string     ← 참조 (agent_jobs/{id})
+│     ├─ interactionCount: number
+│     └─ createdAt: Timestamp
+│
+├─ rooms/                           (방)
+│  └─ {roomId}/
+│     ├─ userId: string              ← 참조
+│     ├─ personaId: string           ← 참조
+│     ├─ imageUrl: string            (Firebase Storage URL)
+│     ├─ imageJobId: string          ← 참조 (agent_jobs/{id})
+│     ├─ imagePrompt: string
+│     ├─ position: { x: number, y: number }
+│     ├─ isUnlocked: boolean
+│     ├─ knockCount: number
+│     └─ createdAt: Timestamp
+│
+├─ chats/                           (대화)
+│  └─ {chatId}/                      ← userId_personaId 조합
+│     ├─ userId: string
+│     ├─ personaId: string
+│     ├─ lastMessageAt: Timestamp
+│     └─ messages/ (Subcollection)   ← 메시지들
+│        └─ {messageId}/
+│           ├─ senderType: 'user' | 'persona'
+│           ├─ content: string
+│           └─ createdAt: Timestamp
+│
+├─ prompt_templates/                (관리자 관리 - 템플릿)
+│  └─ {templateId}/
+│     ├─ name: string
+│     ├─ version: string
+│     ├─ description: string
+│     ├─ sections: map               ← WHY/HOW/WHAT
+│     ├─ variables: array<map>
+│     ├─ agentInstructions: string
+│     ├─ isActive: boolean
+│     ├─ isDefault: boolean
+│     └─ createdAt: Timestamp
+│
+├─ data_pools/                      (관리자 관리 - 데이터 풀)
+│  ├─ experiences/ (Subcollection)
+│  │  └─ items/ (Subcollection)
+│  │     └─ {itemId}/
+│  │        ├─ needType: string
+│  │        ├─ intensity: string
+│  │        ├─ title: string
+│  │        ├─ description: string
+│  │        ├─ tags: string[]
+│  │        ├─ archetypes: string[]
+│  │        ├─ weight: number
+│  │        └─ isActive: boolean
+│  │
+│  ├─ archetypes/ (Subcollection)
+│  │  └─ items/ (Subcollection)
+│  │     └─ {itemId}/
+│  │        ├─ name: string (unique)
+│  │        ├─ displayName: string
+│  │        ├─ needProfile: map
+│  │        ├─ behaviors: array
+│  │        ├─ conversationStyle: map
+│  │        ├─ keywords: string[]
+│  │        └─ isActive: boolean
+│  │
+│  └─ visuals/ (Subcollection)
+│     └─ items/ (Subcollection)
+│        └─ {itemId}/
+│           ├─ needType: string
+│           ├─ intensity: string
+│           ├─ elementType: string  ← 'color', 'object', 'mood'
+│           ├─ value: string
+│           ├─ description: string
+│           ├─ weight: number
+│           └─ isActive: boolean
+│
+└─ agent_jobs/                      (에이전트 실행 기록)
+   └─ {jobId}/
+      ├─ jobType: string
+      ├─ status: string
+      ├─ input: map
+      ├─ output: map
+      ├─ config: map
+      ├─ qualityScore: number
+      ├─ startedAt: Timestamp
+      ├─ completedAt: Timestamp
+      ├─ executionTimeMs: number
+      ├─ errorMessage: string
+      ├─ createdBy: string            ← userId
+      └─ logs/ (Subcollection)        ← Agent 단계별 로그
+         └─ {logId}/
+            ├─ agentName: string
+            ├─ step: number
+            ├─ status: string
+            ├─ input: map
+            ├─ output: map
+            ├─ startedAt: Timestamp
+            ├─ completedAt: Timestamp
+            ├─ durationMs: number
+            └─ errorMessage: string
+
+**Firestore 특징**:
+- Root Collections: 9개 (users, onboarding_data, personas, rooms, chats, prompt_templates, data_pools, agent_jobs)
+- Subcollections: 5개 (messages, experiences/items, archetypes/items, visuals/items, logs)
+- 문서 참조는 문자열 ID로 저장 (Firestore는 JOIN 없음)
+- 실시간 리스너 (`onSnapshot`) 지원
+```
+
+---
+
+## 📊 Firestore 컬렉션 정의
+
+> **Note**: 아래 정의는 TypeScript 인터페이스로 작성되었습니다.
+> Firestore는 스키마가 없지만, Firebase SDK와 타입 안전성을 위해 인터페이스를 사용합니다.
+
+### PostgreSQL → Firestore 전환 요약
+
+| SQL 개념 | Firestore 개념 | 변경 사항 |
+|---------|--------------|----------|
+| `CREATE TABLE users` | `users/` 컬렉션 | Root 컬렉션으로 변환 |
+| `UUID PRIMARY KEY` | 문서 ID (자동 생성 또는 커스텀) | Firestore 자동 ID 또는 Firebase Auth UID |
+| `FOREIGN KEY REFERENCES` | 문서 ID 문자열 참조 | JOIN 불가, 클라이언트 측 조회 필요 |
+| `JSONB` 타입 | `map` (객체) | 네이티브 지원 |
+| `TEXT[]` 배열 | `array` | 네이티브 지원 |
+| `TIMESTAMP` | `Timestamp` | Firestore Timestamp 객체 |
+| `CREATE INDEX` | `firestore.indexes.json` | Composite Index 파일로 관리 |
+| `UNIQUE` 제약 | Firestore Rules로 검증 | 애플리케이션 레벨 검증 필요 |
+| `CHECK` 제약 | Firestore Rules로 검증 | 서버 검증 (Functions 또는 Rules) |
+| `CASCADE DELETE` | Firestore 자동 삭제 (Subcollection은 수동) | Subcollection은 Cloud Functions로 처리 |
+
+### 1. users/ (사용자)
+
+> **Firebase Authentication 통합**: 사용자 인증은 Firebase Authentication이 처리하며,
+> 이 컬렉션은 추가 프로필 정보만 저장합니다.
+
+~~```sql
 CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
@@ -953,21 +1038,48 @@ model AgentJobLog {
 
 ---
 
-## 🔧 Prisma 마이그레이션
+## 🔧 ~~Prisma 마이그레이션~~ → Firebase 설정
 
-### 초기 설정
+> ⚠️ **폐기됨**: Prisma는 더 이상 사용하지 않습니다. Firebase로 전환했습니다.
 
-```bash
+### ~~초기 설정~~ (폐기됨)
+
+~~```bash
 # Prisma 초기화
 npx prisma init
 
 # .env 파일 설정
 DATABASE_URL="postgresql://user:password@localhost:5432/knock"
+```~~
+
+### Firebase 초기 설정 (신규)
+
+```bash
+# Firebase CLI 설치
+npm install -g firebase-tools
+
+# Firebase 로그인
+firebase login
+
+# Firebase 프로젝트 초기화
+firebase init
+
+# 선택 항목:
+# - Firestore
+# - Functions
+# - Storage
+# - Emulators
+
+# .env 파일 설정
+VITE_FIREBASE_API_KEY=your_api_key
+VITE_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=your_project_id
+# ... (기타 Firebase 설정)
 ```
 
-### schema.prisma 전체
+### ~~schema.prisma 전체~~ (폐기됨)
 
-```prisma
+~~```prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -978,11 +1090,17 @@ datasource db {
 }
 
 // (위에 정의된 모든 모델들 포함)
-```
+```~~
 
-### 마이그레이션 실행
+### Firebase Firestore 설정 (신규)
 
-```bash
+**firestore.rules**: [07_FIRESTORE_SECURITY_RULES.md](./07_FIRESTORE_SECURITY_RULES.md) 참고
+
+**firestore.indexes.json**: Composite Index 정의 (자동 생성됨)
+
+### ~~마이그레이션 실행~~ (폐기됨)
+
+~~```bash
 # 마이그레이션 생성
 npx prisma migrate dev --name init
 
@@ -991,15 +1109,33 @@ npx prisma migrate deploy
 
 # Prisma Client 생성
 npx prisma generate
+```~~
+
+### Firebase 배포 (신규)
+
+```bash
+# Firestore Rules 배포
+firebase deploy --only firestore:rules
+
+# Firestore Indexes 배포
+firebase deploy --only firestore:indexes
+
+# Functions 배포
+firebase deploy --only functions
+
+# 전체 배포
+firebase deploy
 ```
 
 ---
 
-## 📊 인덱스 전략
+## 📊 ~~인덱스 전략~~ → Firestore Composite Indexes
 
-### 성능 최적화 인덱스
+> ⚠️ **변경됨**: PostgreSQL 인덱스 → Firestore Composite Indexes
 
-```sql
+### ~~성능 최적화 인덱스~~ (SQL - 폐기됨)
+
+~~```sql
 -- 1. 사용자별 빠른 조회
 CREATE INDEX idx_personas_user_type ON personas(user_id, persona_type);
 CREATE INDEX idx_rooms_user_unlock ON rooms(user_id, is_unlocked);
@@ -1012,15 +1148,82 @@ CREATE INDEX idx_chat_pagination ON chat_messages(
 -- 3. 관리자 캐릭터 검색
 CREATE INDEX idx_admin_char_search ON admin_characters
   USING GIN(to_tsvector('english', name || ' ' || array_to_string(keywords, ' ')));
+```~~
+
+### Firestore Composite Indexes (신규)
+
+**firestore.indexes.json**:
+
+```json
+{
+  "indexes": [
+    {
+      "collectionGroup": "personas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "personaType", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "rooms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "isUnlocked", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "messages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "agent_jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "prompt_templates",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isActive", "order": "ASCENDING" },
+        { "fieldPath": "isDefault", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "items",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "needType", "order": "ASCENDING" },
+        { "fieldPath": "intensity", "order": "ASCENDING" },
+        { "fieldPath": "isActive", "order": "ASCENDING" }
+      ]
+    }
+  ]
+}
 ```
+
+**참고**:
+- Firestore는 단일 필드 인덱스를 자동 생성
+- Composite Index는 2개 이상 필드를 조합한 쿼리에만 필요
+- Firebase Console에서 자동으로 제안됨 (개발 중 누락 시)
 
 ---
 
-## 🔒 데이터 무결성
+## 🔒 ~~데이터 무결성~~ → Firestore Security Rules
 
-### 제약 조건
+> ⚠️ **변경됨**: PostgreSQL 제약 조건 → Firestore Security Rules + Cloud Functions
 
-```sql
+### ~~제약 조건~~ (SQL - 폐기됨)
+
+~~```sql
 -- 1. 룸메이트 중복 방지
 ALTER TABLE personas
   ADD CONSTRAINT one_roommate_per_user
@@ -1035,11 +1238,52 @@ ALTER TABLE rooms
 ALTER TABLE personas
   ADD CONSTRAINT check_keywords_count
   CHECK (array_length(keywords, 1) <= 10);
+```~~
+
+### Firestore Security Rules (신규)
+
+**firestore.rules** 예시:
+
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. 룸메이트 중복 방지 (애플리케이션 레벨에서 검증)
+    match /personas/{personaId} {
+      allow read: if request.auth != null
+        && resource.data.userId == request.auth.uid;
+
+      allow create: if request.auth != null
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.personaType in ['roommate', 'neighbor'];
+      // 중복 방지는 Cloud Functions에서 트랜잭션으로 처리
+    }
+
+    // 2. 위치 중복 방지 (Functions에서 검증)
+    match /rooms/{roomId} {
+      allow read: if request.auth != null
+        && resource.data.userId == request.auth.uid;
+
+      allow create: if request.auth != null
+        && request.resource.data.userId == request.auth.uid;
+      // 위치 중복은 Cloud Functions에서 검증
+    }
+
+    // 3. 배열 크기 제한
+    match /personas/{personaId} {
+      allow update: if request.auth != null
+        && request.resource.data.customKeywords.size() <= 10;
+    }
+  }
+}
 ```
 
-### 트리거 (자동 업데이트)
+**참고**: UNIQUE 제약은 Firestore에 없으므로 Cloud Functions에서 트랜잭션으로 검증 필요
 
-```sql
+### ~~트리거 (자동 업데이트)~~ → Cloud Functions Triggers (신규)
+
+~~```sql
 -- 1. updated_at 자동 업데이트
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -1053,7 +1297,20 @@ CREATE TRIGGER update_personas_updated_at
   BEFORE UPDATE ON personas
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
+```~~
 
+**Firestore에서 updatedAt은 클라이언트에서 명시적으로 설정**:
+
+```typescript
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+
+await updateDoc(doc(db, 'personas', personaId), {
+  name: 'New Name',
+  updatedAt: serverTimestamp()  // 서버 타임스탬프
+});
+```
+
+~~```sql
 -- 2. interaction_count 자동 증가
 CREATE OR REPLACE FUNCTION increment_persona_interaction()
 RETURNS TRIGGER AS $$
@@ -1072,15 +1329,42 @@ CREATE TRIGGER increment_interaction_on_message
   AFTER INSERT ON chat_messages
   FOR EACH ROW
   EXECUTE FUNCTION increment_persona_interaction();
+```~~
+
+**Cloud Functions Trigger** (신규):
+
+```typescript
+// functions/src/index.ts
+import { onDocumentCreated } from 'firebase-functions/v2/firestore';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+
+// messages 생성 시 persona의 interactionCount 증가
+export const incrementInteractionCount = onDocumentCreated(
+  'chats/{chatId}/messages/{messageId}',
+  async (event) => {
+    const message = event.data?.data();
+    if (!message) return;
+
+    const personaId = message.personaId;
+    const db = getFirestore();
+
+    await db.doc(`personas/${personaId}`).update({
+      interactionCount: FieldValue.increment(1),
+      lastInteractionAt: FieldValue.serverTimestamp()
+    });
+  }
+);
 ```
 
 ---
 
-## 📈 쿼리 최적화 예시
+## 📈 ~~쿼리 최적화 예시~~ → Firestore 쿼리 패턴
 
-### N+1 문제 방지
+> ⚠️ **변경됨**: Prisma JOIN → Firestore 클라이언트 측 조인 또는 비정규화
 
-```typescript
+### ~~N+1 문제 방지~~ (Prisma - 폐기됨)
+
+~~```typescript
 // ❌ 나쁜 예: N+1 쿼리
 const rooms = await prisma.room.findMany({ where: { userId } });
 
@@ -1104,11 +1388,61 @@ const rooms = await prisma.room.findMany({
     }
   }
 });
-```
+```~~
 
-### 복잡한 분석 쿼리
+### Firestore 쿼리 패턴 (신규)
 
 ```typescript
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+
+// ❌ 나쁜 예: N+1 쿼리 (Firestore도 동일한 문제)
+const roomsSnap = await getDocs(
+  query(collection(db, 'rooms'), where('userId', '==', userId))
+);
+
+const rooms = [];
+for (const roomDoc of roomsSnap.docs) {
+  const roomData = roomDoc.data();
+  const personaDoc = await getDoc(doc(db, 'personas', roomData.personaId));
+  rooms.push({ ...roomData, persona: personaDoc.data() });
+  // N번 쿼리 발생
+}
+
+// ✅ 좋은 예 1: 비정규화 (Firestore 권장)
+// rooms 문서에 persona 정보를 일부 포함
+const roomsSnap = await getDocs(
+  query(collection(db, 'rooms'), where('userId', '==', userId))
+);
+
+const rooms = roomsSnap.docs.map(doc => ({
+  ...doc.data(),
+  // persona 정보가 이미 포함되어 있음 (denormalized)
+  personaName: doc.data().personaName,
+  personaArchetype: doc.data().personaArchetype
+}));
+
+// ✅ 좋은 예 2: 병렬 조회
+const roomsSnap = await getDocs(
+  query(collection(db, 'rooms'), where('userId', '==', userId))
+);
+
+const personaIds = [...new Set(roomsSnap.docs.map(d => d.data().personaId))];
+const personasPromises = personaIds.map(id => getDoc(doc(db, 'personas', id)));
+const personaDocs = await Promise.all(personasPromises);
+
+const personasMap = Object.fromEntries(
+  personaDocs.map(d => [d.id, d.data()])
+);
+
+const rooms = roomsSnap.docs.map(roomDoc => ({
+  ...roomDoc.data(),
+  persona: personasMap[roomDoc.data().personaId]
+}));
+```
+
+### ~~복잡한 분석 쿼리~~ → Firestore 집계 (신규)
+
+~~```typescript
 // 사용자별 상호작용 통계
 const stats = await prisma.$queryRaw`
   SELECT
@@ -1122,15 +1456,50 @@ const stats = await prisma.$queryRaw`
   GROUP BY p.id, p.name
   ORDER BY message_count DESC
 `;
+```~~
+
+```typescript
+import { collection, query, where, getDocs, getCountFromServer } from 'firebase/firestore';
+
+// Firestore 집계 (Count Aggregation)
+const personasSnap = await getDocs(
+  query(collection(db, 'personas'), where('userId', '==', userId))
+);
+
+const stats = await Promise.all(
+  personasSnap.docs.map(async (personaDoc) => {
+    const personaData = personaDoc.data();
+
+    // 메시지 수 집계
+    const messagesQuery = query(
+      collection(db, `chats/${userId}_${personaDoc.id}/messages`)
+    );
+    const messageCountSnap = await getCountFromServer(messagesQuery);
+
+    return {
+      id: personaDoc.id,
+      name: personaData.name,
+      messageCount: messageCountSnap.data().count,
+      lastInteractionAt: personaData.lastInteractionAt
+    };
+  })
+);
+
+// 정렬
+stats.sort((a, b) => b.messageCount - a.messageCount);
 ```
+
+**참고**: 복잡한 집계는 Cloud Functions로 처리하고 결과를 캐싱하는 것이 효율적
 
 ---
 
-## 🗂️ 백업 전략
+## 🗂️ ~~백업 전략~~ → Firebase 백업
 
-### 자동 백업
+> ⚠️ **변경됨**: PostgreSQL 백업 → Firestore 자동 백업
 
-```bash
+### ~~자동 백업~~ (PostgreSQL - 폐기됨)
+
+~~```bash
 # PostgreSQL 백업 스크립트
 #!/bin/bash
 
@@ -1143,38 +1512,91 @@ pg_dump $DATABASE | gzip > $BACKUP_DIR/knock_$DATE.sql.gz
 
 # 7일 이상 된 백업 삭제
 find $BACKUP_DIR -name "knock_*.sql.gz" -mtime +7 -delete
-```
+```~~
 
-### 복구
+### Firebase 자동 백업 (신규)
+
+**Firestore 백업 (gcloud CLI)**:
 
 ```bash
+# Cloud Firestore 자동 백업 설정 (Firebase Blaze 플랜 필요)
+gcloud firestore export gs://your-bucket-name/firestore-backups/$(date +%Y%m%d)
+
+# Cloud Scheduler로 자동화 (매일 새벽 2시)
+gcloud scheduler jobs create app-engine nightly-firestore-backup \
+  --schedule="0 2 * * *" \
+  --http-method=POST \
+  --uri="https://<region>-<project>.cloudfunctions.net/firestoreBackup"
+```
+
+**Cloud Functions로 백업 자동화**:
+
+```typescript
+// functions/src/backup.ts
+import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { getFirestore } from 'firebase-admin/firestore';
+
+export const scheduledFirestoreBackup = onSchedule('every day 02:00', async () => {
+  const projectId = process.env.GCLOUD_PROJECT;
+  const bucket = `gs://${projectId}-firestore-backups`;
+
+  const client = getFirestore();
+  const timestamp = new Date().toISOString().split('T')[0];
+
+  await client.backup(`${bucket}/${timestamp}`);
+  console.log(`Firestore backup completed: ${timestamp}`);
+});
+```
+
+### ~~복구~~ (PostgreSQL - 폐기됨)
+
+~~```bash
 # 복구
 gunzip -c knock_20251028.sql.gz | psql knock
+```~~
+
+### Firebase 복구 (신규)
+
+```bash
+# Firestore 복구
+gcloud firestore import gs://your-bucket-name/firestore-backups/2025-11-04
+
+# 특정 컬렉션만 복구
+gcloud firestore import gs://your-bucket-name/firestore-backups/2025-11-04 \
+  --collection-ids=personas,rooms
 ```
+
+**참고**: Firebase는 자동으로 지역 복제 및 Point-in-Time Recovery 제공 (Blaze 플랜)
 
 ---
 
 ## 📝 요약
 
-### Agent-Based Architecture
+### Agent-Based Architecture + Firebase
 
-**11개 테이블**:
-1. `users` - 사용자
-2. `onboarding_data` - 온보딩 데이터
-3. `personas` - Agent가 생성한 룸메이트/이웃
-4. `rooms` - Agent가 생성한 방 이미지
-5. `chat_messages` - 대화 기록
-6. `prompt_templates` - 관리자가 관리하는 템플릿
-7. `data_pool_experiences` - Agent가 사용할 경험 데이터 풀
-8. `data_pool_archetypes` - Agent가 사용할 아키타입 데이터 풀
-9. `data_pool_visuals` - Agent가 사용할 시각적 요소 데이터 풀
-10. `agent_jobs` - Agent 실행 기록
-11. `agent_job_logs` - Agent 실행 로그 상세
+**~~11개 SQL 테이블~~ → 9개 Firestore Root Collections + 5개 Subcollections**:
 
-### 관리자의 역할
+#### Root Collections:
+1. `users/` - Firebase Auth 사용자 (추가 프로필 정보)
+2. `onboarding_data/` - 온보딩 데이터
+3. `personas/` - Agent가 생성한 룸메이트/이웃
+4. `rooms/` - Agent가 생성한 방 이미지
+5. `chats/` - 대화 메타데이터
+6. `prompt_templates/` - 관리자가 관리하는 템플릿
+7. `data_pools/` - Agent가 사용할 데이터 풀 (Root)
+8. `agent_jobs/` - Agent 실행 기록
+
+#### Subcollections:
+- `chats/{chatId}/messages/` - 대화 메시지들
+- `data_pools/experiences/items/` - 경험 데이터 풀
+- `data_pools/archetypes/items/` - 아키타입 데이터 풀
+- `data_pools/visuals/items/` - 시각적 요소 데이터 풀
+- `agent_jobs/{jobId}/logs/` - Agent 실행 로그 상세
+
+### 관리자의 역할 (변경 없음)
 
 ✅ **관리하는 것**:
-- 시스템 프롬프트 템플릿 (`prompt_templates`)
+- 시스템 프롬프트 템플릿 (`prompt_templates/`)
 - 데이터 풀 (experiences, archetypes, visuals)
 - Agent 설정 및 모니터링
 
@@ -1183,40 +1605,63 @@ gunzip -c knock_20251028.sql.gz | psql knock
 - 이미지 생성 (Agent가 자동 생성)
 - 욕구 분석 (Agent가 자동 분석)
 
-### Agent 추적 가능성
+### Agent 추적 가능성 (변경 없음)
 
-모든 Agent 실행은 `agent_jobs`와 `agent_job_logs`에 기록되어:
+모든 Agent 실행은 `agent_jobs/`와 `agent_jobs/{id}/logs/` 서브컬렉션에 기록되어:
 - 디버깅 가능
 - 품질 모니터링 가능
 - 실패 원인 추적 가능
 - 성능 분석 가능
 
+### PostgreSQL vs Firestore 주요 차이점
+
+| 항목 | PostgreSQL | Firestore |
+|------|-----------|-----------|
+| **구조** | 11개 테이블 (관계형) | 9개 Root Collections + 5개 Subcollections |
+| **관계** | Foreign Key (강제) | 문서 참조 (문자열 ID, 약한 참조) |
+| **쿼리** | SQL JOIN | 클라이언트 측 조인 또는 비정규화 |
+| **트랜잭션** | ACID 보장 | 제한적 트랜잭션 (단일 문서 또는 배치) |
+| **인덱스** | CREATE INDEX | firestore.indexes.json |
+| **스키마** | 엄격한 스키마 | 스키마 없음 (유연) |
+| **실시간** | 폴링 필요 | 네이티브 리스너 (`onSnapshot`) |
+| **비용** | 서버 유지비 | 읽기/쓰기/저장 단위 과금 |
+| **확장성** | 수직 확장 | 자동 수평 확장 |
+
 ---
 
-## 📝 다음 단계
+## 📝 다음 단계 (Firebase 기준)
 
-### Phase 1: 데이터베이스 구축
-1. ✅ Agent 기반 스키마 설계 완료
-2. [ ] Prisma schema.prisma 파일 작성
-3. [ ] 초기 마이그레이션 실행
-4. [ ] pgvector extension 설치 (향후 메모리 시스템)
+### ~~Phase 1: 데이터베이스 구축~~ (폐기됨)
+~~1. ✅ Agent 기반 스키마 설계 완료~~
+~~2. [ ] Prisma schema.prisma 파일 작성~~
+~~3. [ ] 초기 마이그레이션 실행~~
+~~4. [ ] pgvector extension 설치 (향후 메모리 시스템)~~
 
-### Phase 2: 시드 데이터 생성
+### Phase 1: Firebase 설정 (신규)
+1. ✅ Firestore 컬렉션 구조 설계 완료
+2. 🔄 firestore.rules 파일 작성 (진행 중)
+3. 🔄 firestore.indexes.json 파일 작성 (진행 중)
+4. [ ] Firebase Functions 프로젝트 구조 생성
+5. [ ] Firebase Emulators 설정
+
+### Phase 2: 시드 데이터 생성 (변경 없음)
 1. [ ] 기본 프롬프트 템플릿 1개
 2. [ ] 경험 데이터 풀 50개 (욕구별 10개)
 3. [ ] 아키타입 데이터 풀 10개
 4. [ ] 시각적 요소 데이터 풀 100개 (욕구별 20개)
 
-### Phase 3: 모니터링 & 최적화
-1. [ ] Agent 실행 대시보드 구현
+### Phase 3: 모니터링 & 배포
+1. [ ] Agent 실행 대시보드 구현 (Firebase Realtime)
 2. [ ] 품질 점수 임계값 설정
-3. [ ] 실패 알림 시스템
-4. [ ] 백업 스크립트 설정
+3. [ ] Cloud Functions로 실패 알림 시스템
+4. [ ] Firebase 자동 백업 설정 (Blaze 플랜)
 
 ---
 
 **참조 문서**:
-- [01_ADMIN_PAGE_SPEC.md](./01_ADMIN_PAGE_SPEC.md) - 관리자 페이지 (템플릿 & 데이터 풀 관리)
+- [01_ADMIN_PAGE_SPEC.md](./01_ADMIN_PAGE_SPEC.md) - 관리자 페이지 (Firebase 기반)
 - [02_CHARACTER_GENERATOR_FLOW.md](./02_CHARACTER_GENERATOR_FLOW.md) - 5개 Agent 파이프라인
-- [05_API_SPECIFICATIONS.md](./05_API_SPECIFICATIONS.md) - API 엔드포인트
-- [Prisma 공식 문서](https://www.prisma.io/docs)
+- [05_API_SPECIFICATIONS.md](./05_API_SPECIFICATIONS.md) - Firebase Functions API
+- [FIREBASE_MIGRATION.md](./FIREBASE_MIGRATION.md) - PostgreSQL → Firebase 전환 가이드
+- ~~[Prisma 공식 문서](https://www.prisma.io/docs)~~ (폐기됨)
+- [Firebase 공식 문서](https://firebase.google.com/docs)

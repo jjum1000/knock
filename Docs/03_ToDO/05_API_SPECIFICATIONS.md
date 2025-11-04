@@ -1,6 +1,16 @@
-# API 명세서 (Agent-Based)
-**작성일**: 2025-10-28
-**목적**: 에이전트 기반 룸메이트 시스템 전체 API 엔드포인트 정의
+# API 명세서 - Firebase Functions (Agent-Based)
+**작성일**: 2025-10-28 (최종 수정: 2025-11-04)
+**목적**: 에이전트 기반 룸메이트 시스템 API 정의
+
+> ⚠️ **아키텍처 전환 중**: 이 문서는 Express REST API 기반으로 작성되었으나, 프로젝트는 **Firebase Functions + Firestore**로 전환 중입니다.
+>
+> **Firebase 전환 가이드**: [FIREBASE_MIGRATION.md](./FIREBASE_MIGRATION.md) 참고
+>
+> **주요 변경사항**:
+> - ~~Express REST API (POST /api/v1/...)~~ → **Firebase Callable Functions**
+> - ~~PostgreSQL + Prisma~~ → **Firestore (NoSQL)**
+> - ~~JWT 인증~~ → **Firebase Authentication + Custom Claims**
+> - 일부 GET 요청 → **Firestore 직접 쿼리** (실시간 리스너)
 
 ---
 
@@ -11,38 +21,92 @@
 - 실제 캐릭터/이미지 생성은 **5개 자동 Agent**가 수행
 - 모든 생성 과정은 **agent_jobs**로 추적 가능
 
-**Base URL**: `http://localhost:3003/api/v1`
-**Production**: `https://api.knock.com/api/v1`
+**API 아키텍처 (Firebase)**:
+- **Firebase Callable Functions**: 서버 로직 실행 (38개 함수)
+- **Firestore Direct Queries**: 실시간 데이터 조회 (20개 쿼리)
+- **Pub/Sub Triggers**: Agent 파이프라인 오케스트레이션
+
+~~**Base URL**: `http://localhost:3003/api/v1` (Express - 폐기됨)~~
+**Firebase Functions URL**: `https://<region>-<project>.cloudfunctions.net/`
 
 ---
 
-## 🔐 인증
+## 🔐 인증 (Firebase Authentication)
 
-### 헤더
+### Firebase ID Token
 
-```http
-Authorization: Bearer <JWT_TOKEN>
-```
+~~모든 API 요청은 `Authorization` 헤더에 JWT 토큰을 포함해야 합니다.~~ (Express - 폐기됨)
 
-### 관리자 권한
-
-관리자 전용 엔드포인트는 `/admin/` 경로를 사용하며, 관리자 토큰이 필요합니다.
+**Firebase Callable Functions**는 Firebase SDK를 통해 자동으로 인증됩니다:
 
 ```typescript
-// 관리자 인증 미들웨어
-function requireAdmin(req, res, next) {
-  const user = req.user; // JWT에서 추출
+// Frontend: Firebase SDK가 자동으로 ID 토큰 전송
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
-  if (!user.isAdmin) {
-    return res.status(403).json({
-      success: false,
-      error: 'ADMIN_REQUIRED',
-      message: '관리자 권한이 필요합니다'
-    });
+const functions = getFunctions();
+const getTemplates = httpsCallable(functions, 'getTemplates');
+
+// Firebase가 자동으로 현재 로그인한 사용자의 ID 토큰을 포함
+const result = await getTemplates({ isActive: true });
+```
+
+**Backend: Firebase Functions에서 인증 확인**:
+
+```typescript
+// Firebase Functions에서 자동으로 context.auth 제공
+import { onCall, HttpsError } from 'firebase-functions/v2/https';
+
+export const getTemplates = onCall(async (request) => {
+  // 인증되지 않은 요청 차단
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', '로그인이 필요합니다');
   }
 
-  next();
-}
+  const userId = request.auth.uid; // Firebase UID
+  // ...
+});
+```
+
+### 관리자 권한 (Custom Claims)
+
+관리자 전용 Functions는 **Firebase Custom Claims**로 권한을 확인합니다.
+
+~~관리자 전용 엔드포인트는 `/admin/` 경로를 사용하며, 관리자 토큰이 필요합니다.~~ (Express - 폐기됨)
+
+```typescript
+// Backend: Firebase Functions에서 관리자 권한 확인
+import { onCall, HttpsError } from 'firebase-functions/v2/https';
+
+export const createTemplate = onCall(async (request) => {
+  // 인증 확인
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', '로그인이 필요합니다');
+  }
+
+  // 관리자 권한 확인 (Custom Claims)
+  if (request.auth.token.admin !== true) {
+    throw new HttpsError(
+      'permission-denied',
+      '관리자 권한이 필요합니다'
+    );
+  }
+
+  // 관리자 전용 로직 실행
+  // ...
+});
+```
+
+**관리자 Custom Claims 설정** (Firebase Admin SDK):
+
+```typescript
+// 특정 사용자를 관리자로 설정
+import { getAuth } from 'firebase-admin/auth';
+
+await getAuth().setCustomUserClaims(userId, { admin: true });
+
+// Frontend에서 Custom Claims 확인
+const idTokenResult = await user.getIdTokenResult();
+const isAdmin = idTokenResult.claims.admin === true;
 ```
 
 ---
@@ -57,6 +121,44 @@ function requireAdmin(req, res, next) {
 6. [사용자 - 룸메이트](#6-사용자---룸메이트)
 7. [사용자 - 방 관리](#7-사용자---방-관리)
 8. [대화 시스템](#8-대화-시스템)
+
+---
+
+## 🔄 Firebase 전환 매핑 테이블
+
+> **이 표는 Express REST API → Firebase Functions 전환 참조용입니다.**
+
+| 섹션 | Express 방식 | Firebase 방식 | 비고 |
+|------|-------------|--------------|------|
+| **1. 온보딩** | `POST /onboarding/save`<br>`POST /onboarding/complete` | **Callable Functions**:<br>`saveOnboarding()`<br>`completeOnboarding()` | Agent Pipeline은 Pub/Sub Trigger로 자동 실행 |
+| **2. Agent 실행** | `POST /admin/agent/execute`<br>`POST /admin/agent/retry`<br>`POST /admin/agent/cancel`<br>`GET /admin/agent/jobs`<br>`GET /admin/agent/jobs/:id` | **Callable Functions**:<br>`executeAgentManual()`<br>`retryAgentJob()`<br>`cancelAgentJob()`<br><br>**Firestore Query**:<br>`agent_jobs/` 컬렉션 직접 쿼리 | Cloud Tasks로 Agent 오케스트레이션 |
+| **3. 템플릿 관리** | `GET /admin/templates`<br>`POST /admin/templates`<br>`PUT /admin/templates/:id`<br>`DELETE /admin/templates/:id`<br>`POST /admin/templates/:id/test` | **Callable Functions**:<br>`getTemplates()`<br>`createTemplate()`<br>`updateTemplate()`<br>`deleteTemplate()`<br>`testTemplate()` | prompt_templates/ 컬렉션 |
+| **4. 데이터 풀 관리** | 18개 REST 엔드포인트<br>(Experiences, Archetypes, Visuals CRUD) | **18개 Callable Functions**:<br>`getExperiences()`, `createExperience()`<br>`getArchetypes()`, `createArchetype()`<br>`getVisuals()`, `createVisual()`<br>등 | data_pools/ 컬렉션 (3개 서브컬렉션) |
+| **5. 모니터링** | `GET /admin/monitoring/dashboard`<br>`GET /admin/monitoring/quality`<br>`GET /admin/monitoring/performance` | **Firestore Queries** (실시간):<br>`agent_jobs/` 컬렉션 집계<br>`roommates/` 컬렉션 집계<br><br>**Optional Callable**:<br>`getDashboardStats()` (캐싱용) | 실시간 리스너 권장 |
+| **6. 룸메이트** | `GET /roommates`<br>`GET /roommates/:id`<br>`POST /roommates/generate` | **Firestore Query**:<br>`roommates/` where userId<br><br>**Callable Function**:<br>`generateRoommate()` | Firestore 보안 규칙으로 사용자별 필터링 |
+| **7. 방 관리** | `GET /rooms`<br>`PUT /rooms/:id/position`<br>`DELETE /rooms/:id` | **Firestore Query**:<br>`rooms/` where userId<br><br>**Callable Functions**:<br>`updateRoomPosition()`<br>`deleteRoom()` | |
+| **8. 대화 시스템** | `POST /chat/message`<br>`GET /chat/history` | **Callable Function**:<br>`sendChatMessage()`<br><br>**Firestore Query**:<br>`chats/` 실시간 리스너 | Gemini API는 Functions에서 호출 |
+
+### 주요 변경 사항 요약
+
+1. **인증 방식**:
+   - ~~Express JWT 미들웨어~~ → Firebase Authentication (자동)
+   - ~~관리자 토큰~~ → Custom Claims (`admin: true`)
+
+2. **데이터 접근**:
+   - ~~Prisma ORM~~ → Firestore SDK
+   - ~~SQL WHERE 쿼리~~ → Firestore `where()`, `orderBy()`, `limit()`
+
+3. **실시간 데이터**:
+   - ~~폴링 (GET 반복 호출)~~ → Firestore `onSnapshot()` 리스너
+
+4. **에러 처리**:
+   - ~~HTTP 상태 코드 + JSON~~ → `HttpsError` 객체
+   - 예: `throw new HttpsError('permission-denied', '관리자 권한이 필요합니다')`
+
+5. **Agent 오케스트레이션**:
+   - ~~Express 내부 함수 호출~~ → Pub/Sub + Cloud Tasks
+   - 각 Agent는 독립적인 Background Function으로 실행
 
 ---
 
