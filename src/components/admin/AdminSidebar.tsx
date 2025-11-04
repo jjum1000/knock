@@ -63,6 +63,18 @@ const navItems: NavItem[] = [
     title: 'Monitoring',
     href: '/admin/monitoring',
     icon: Activity,
+    children: [
+      {
+        title: 'Dashboard',
+        href: '/admin/monitoring',
+        icon: LayoutDashboard,
+      },
+      {
+        title: 'Jobs',
+        href: '/admin/monitoring/jobs',
+        icon: Activity,
+      },
+    ],
   },
   {
     title: 'Agent Control',
