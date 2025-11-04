@@ -1,0 +1,404 @@
+// Knock - Agent-Based Roommate System
+// Database Schema - SQLite (for development)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// CORE USER SYSTEM
+// ============================================================================
+
+model User {
+  id            String    @id @default(uuid())
+
+  // Authentication
+  email         String    @unique
+  passwordHash  String    @map("password_hash")
+
+  // Profile
+  username      String?
+  displayName   String?   @map("display_name")
+
+  // Permissions
+  isAdmin       Boolean   @default(false) @map("is_admin")
+  isPremium     Boolean   @default(false) @map("is_premium")
+  premiumExpiresAt DateTime? @map("premium_expires_at")
+
+  // Metadata
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  lastLoginAt   DateTime? @map("last_login_at")
+
+  // Onboarding
+  onboardingCompleted   Boolean   @default(false) @map("onboarding_completed")
+  onboardingCompletedAt DateTime? @map("onboarding_completed_at")
+
+  // Relations
+  personas              Persona[]
+  rooms                 Room[]
+  chatMessages          ChatMessage[]
+  onboardingData        OnboardingData?
+
+  // Admin Relations
+  promptTemplates       PromptTemplate[]
+  dataPoolExperiences   DataPoolExperience[]
+  dataPoolArchetypes    DataPoolArchetype[]
+  dataPoolVisuals       DataPoolVisual[]
+  agentJobs             AgentJob[]
+
+  @@map("users")
+}
+
+model OnboardingData {
+  id                String   @id @default(uuid())
+  userId            String   @unique @map("user_id")
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Auto-collected data (stored as comma-separated strings)
+  domains           String   @default("")
+  keywords          String   @default("")
+  categories        String   @default("")
+
+  // Manual input (stored as comma-separated strings)
+  interests         String   @default("")
+  avoidTopics       String   @default("") @map("avoid_topics")
+
+  // Preferences
+  conversationStyle String?  @map("conversation_style")
+  responseLength    String?  @map("response_length")
+
+  // Raw data (JSON string)
+  rawData           String?  @map("raw_data")
+
+  // Metadata
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("onboarding_data")
+}
+
+// ============================================================================
+// AGENT-GENERATED CHARACTERS
+// ============================================================================
+
+model Persona {
+  id                String       @id @default(uuid())
+  userId            String       @map("user_id")
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Character type
+  personaType       String       @map("persona_type") // 'roommate' or 'neighbor'
+
+  // Basic info (Agent 2 generates)
+  name              String
+  age               Int?
+  archetype         String?
+
+  // System prompt (Agent 3 assembles)
+  systemPrompt      String       @map("system_prompt")
+  templateId        String?      @map("template_id")
+  template          PromptTemplate? @relation(fields: [templateId], references: [id])
+
+  // Need vectors (Agent 1 analyzes) - JSON string
+  needVectors       String       @map("need_vectors")
+
+  // Character profile (Agent 2 generates) - JSON string
+  characterProfile  String       @map("character_profile")
+
+  // Generation metadata
+  generationJobId   String?      @map("generation_job_id")
+  generationJob     AgentJob?    @relation(fields: [generationJobId], references: [id])
+  generationMethod  String?      @map("generation_method")
+
+  // User customization (comma-separated strings)
+  customKeywords    String       @default("") @map("custom_keywords")
+  focusTopics       String       @default("") @map("focus_topics")
+  avoidTopics       String       @default("") @map("avoid_topics")
+
+  // Statistics
+  interactionCount  Int          @default(0) @map("interaction_count")
+  lastInteractionAt DateTime?    @map("last_interaction_at")
+
+  // Metadata
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  // Relations
+  rooms             Room[]
+  chatMessages      ChatMessage[]
+
+  @@unique([userId, personaType])
+  @@map("personas")
+}
+
+model Room {
+  id                  String    @id @default(uuid())
+  userId              String    @map("user_id")
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  personaId           String    @map("persona_id")
+  persona             Persona   @relation(fields: [personaId], references: [id], onDelete: Cascade)
+
+  // Visual (Agent 5 generates)
+  imageUrl            String    @map("image_url")
+  imageJobId          String?   @map("image_job_id")
+  imageJob            AgentJob? @relation(fields: [imageJobId], references: [id])
+  imagePrompt         String?   @map("image_prompt")
+
+  // Position (grid coordinates)
+  positionX           Int       @default(0) @map("position_x")
+  positionY           Int       @default(0) @map("position_y")
+
+  // State
+  isUnlocked          Boolean   @default(true) @map("is_unlocked")
+  unlockMethod        String?   @map("unlock_method")
+
+  // Knock system
+  lastKnockAt         DateTime? @map("last_knock_at")
+  nextKnockAvailableAt DateTime? @map("next_knock_available_at")
+  knockCount          Int       @default(0) @map("knock_count")
+
+  // Metadata
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  @@unique([userId, positionX, positionY])
+  @@map("rooms")
+}
+
+// ============================================================================
+// CHAT SYSTEM
+// ============================================================================
+
+model ChatMessage {
+  id          String     @id @default(uuid())
+  userId      String     @map("user_id")
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  personaId   String     @map("persona_id")
+  persona     Persona    @relation(fields: [personaId], references: [id], onDelete: Cascade)
+
+  senderType  String     @map("sender_type") // 'user' or 'persona'
+  content     String
+
+  createdAt   DateTime   @default(now()) @map("created_at")
+
+  @@map("chat_messages")
+}
+
+// ============================================================================
+// AGENT SYSTEM - TEMPLATES & DATA POOLS
+// ============================================================================
+
+model PromptTemplate {
+  id                String    @id @default(uuid())
+
+  // Metadata
+  name              String
+  version           String    @default("1.0")
+  description       String?
+
+  // Template sections (JSON string)
+  sections          String
+
+  // Variable definitions (JSON string)
+  variables         String
+
+  // Agent instructions
+  agentInstructions String?   @map("agent_instructions")
+
+  // Status
+  isActive          Boolean   @default(true) @map("is_active")
+  isDefault         Boolean   @default(false) @map("is_default")
+
+  // Metadata
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  createdById       String?   @map("created_by")
+  createdBy         User?     @relation(fields: [createdById], references: [id])
+
+  // Relations
+  personas          Persona[]
+
+  @@map("prompt_templates")
+}
+
+model DataPoolExperience {
+  id          String   @id @default(uuid())
+
+  // Related need
+  needType    String   @map("need_type")
+  intensity   String
+
+  // Experience content
+  title       String
+  description String
+
+  // Additional context (stored as comma-separated)
+  ageRange    String   @map("age_range") // e.g., "13,15"
+  learnings   String   @default("") // comma-separated
+
+  // Tags and archetypes (comma-separated)
+  tags        String   @default("")
+  archetypes  String   @default("")
+
+  // Triggers (JSON string)
+  triggers    String
+
+  // Weight for selection probability
+  weight      Int      @default(100)
+
+  // Status
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdById String?  @map("created_by")
+  createdBy   User?    @relation(fields: [createdById], references: [id])
+
+  @@map("data_pool_experiences")
+}
+
+model DataPoolArchetype {
+  id                String   @id @default(uuid())
+
+  // Archetype info
+  name              String   @unique
+  displayName       String   @map("display_name")
+  description       String
+
+  // Need profile (JSON string)
+  needProfile       String   @map("need_profile")
+
+  // Behaviors (JSON string)
+  behaviors         String
+
+  // Conversation style (JSON string)
+  conversationStyle String?  @map("conversation_style")
+
+  // Visual elements (JSON string)
+  visualElements    String?  @map("visual_elements")
+
+  // Keywords (comma-separated)
+  keywords          String   @default("")
+
+  // Matching needs (comma-separated)
+  matchingNeeds     String   @default("") @map("matching_needs")
+
+  // Status
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  createdById       String?  @map("created_by")
+  createdBy         User?    @relation(fields: [createdById], references: [id])
+
+  @@map("data_pool_archetypes")
+}
+
+model DataPoolVisual {
+  id          String   @id @default(uuid())
+
+  // Related need
+  needType    String   @map("need_type")
+  intensity   String
+
+  // Visual element type
+  elementType String   @map("element_type")
+
+  // Value
+  value       String
+  description String?
+
+  // Prompt fragment for image generation
+  promptFragment String? @map("prompt_fragment")
+
+  // Weight
+  weight      Int      @default(100)
+
+  // Status
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdById String?  @map("created_by")
+  createdBy   User?    @relation(fields: [createdById], references: [id])
+
+  @@map("data_pool_visuals")
+}
+
+// ============================================================================
+// AGENT EXECUTION TRACKING
+// ============================================================================
+
+model AgentJob {
+  id              String    @id @default(uuid())
+
+  // Job type
+  jobType         String    @map("job_type")
+
+  // Status
+  status          String
+
+  // Input/Output (JSON strings)
+  input           String
+  output          String?
+
+  // Configuration (JSON string)
+  config          String?
+
+  // Quality score (stored as float)
+  qualityScore    Float?    @map("quality_score")
+
+  // Execution info
+  startedAt       DateTime? @map("started_at")
+  completedAt     DateTime? @map("completed_at")
+  executionTimeMs Int?      @map("execution_time_ms")
+
+  // Error info
+  errorMessage    String?   @map("error_message")
+  errorStack      String?   @map("error_stack")
+
+  // Metadata
+  createdAt       DateTime  @default(now()) @map("created_at")
+  createdById     String?   @map("created_by")
+  createdBy       User?     @relation(fields: [createdById], references: [id])
+
+  // Relations
+  personas        Persona[]
+  rooms           Room[]
+  logs            AgentJobLog[]
+
+  @@map("agent_jobs")
+}
+
+model AgentJobLog {
+  id           String    @id @default(uuid())
+  jobId        String    @map("job_id")
+  job          AgentJob  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  // Agent info
+  agentName    String    @map("agent_name")
+  step         Int
+
+  // Status
+  status       String
+
+  // Input/Output (JSON strings)
+  input        String?
+  output       String?
+
+  // Timing
+  startedAt    DateTime  @default(now()) @map("started_at")
+  completedAt  DateTime? @map("completed_at")
+  durationMs   Int?      @map("duration_ms")
+
+  // Error
+  errorMessage String?   @map("error_message")
+
+  // Metadata
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@map("agent_job_logs")
+}
